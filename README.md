@@ -13,7 +13,7 @@ Also included is a mini transport bar, with a share function (generates a MusicD
 
 Now the why?
 
-I love music and between local albums and Qobuz I have a combined album count of ~12k, so sometimes I just don’t want to choose. This presents 12 options on the screen at a time. Nothing taking your fancy, refresh the screen. Play now, add to queue etc. it scrapes Qobuz for album info. Roon’s API restrictions unfortunately restricts pulling this metadata.
+I love music and between local albums and Qobuz I have a combined album count of ~12k, so sometimes I just don’t want to choose. This presents 12 options on the screen at a time on a iPhone, more on tablets and desktops. Nothing taking your fancy, refresh the screen. Play now, add to queue etc. it scrapes Qobuz for album info. Roon’s API restrictions unfortunately restricts pulling this metadata.
 
 I have a version for Lyrion Music Server and Volumio as well. LMS is my choice which has manual search function as well. I haven’t put search inside the Roon version, I may if the Roon API allows the way I want it.
 
