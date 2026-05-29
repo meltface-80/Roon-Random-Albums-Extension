@@ -68,10 +68,11 @@ journalctl -u roon-random-albums -f     # live logs (Ctrl-C to exit)
 MacOS
 
 # Install Node (choose one):
-#   - Download the macOS installer from https://nodejs.org  (LTS), OR
-#   - With Homebrew:
+
+Download the macOS installer from https://nodejs.org  (LTS), OR
+With Homebrew:
 brew install node
-# git is usually already present; if not:
+git is usually already present; if not:
 xcode-select --install     # or: brew install git
 
 node --version             # verify v18+
