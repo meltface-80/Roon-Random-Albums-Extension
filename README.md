@@ -1,4 +1,5 @@
-# Random Albums — a Roon extension
+# Random Albums
+# A Roon extension
 A web UI that shows a screenful of random albums from your Roon library, with
 Play Now, Add to Queue, Play Next, Shuffle, and Start Radio
 actions targeting any of your zones. Refresh button reshuffles the wall.
@@ -73,7 +74,8 @@ Download the macOS installer from https://nodejs.org  (LTS), OR
 With Homebrew:
 brew install node
 git is usually already present; if not:
-xcode-select --install     # or: brew install git
+xcode-select --install
+or: brew install git
 
 node --version             # verify v18+
 Unpack and install
@@ -83,6 +85,7 @@ tar -xzf ~/Downloads/roon-random-albums.tar.gz
 cd roon-random-albums
 npm install
 node index.js               # test — should print the listening line
+
 Open http://localhost:3399 (or http://:3399 from another device)
 
 Auto-start on macOS (launchd, optional)
