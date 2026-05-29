@@ -1,4 +1,4 @@
-Random Albums — a Roon extension
+# Random Albums — a Roon extension
 A web UI that shows a screenful of random albums from your Roon library, with
 Play Now, Add to Queue, Play Next, Shuffle, and Start Radio
 actions targeting any of your zones. Refresh button reshuffles the wall.
@@ -23,18 +23,22 @@ With iOS you can save it to the Home Screen and it acts like a full screen app.
 Linux
 
 # 1. Install Node + git
+
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs git
 node --version        # must be v18+
 which node            # NOTE this path for the service file
 
 # 2. Unpack
+
 cd /opt && sudo tar -xzf ~/roon-random-albums.tar.gz   # → /opt/roon-random-albums
 
 # 3. Dependencies
+
 cd /opt/roon-random-albums && npm install
 
 # 4. Test by hand FIRST
+
 node index.js         # should print "listening on http://0.0.0.0:3399", Ctrl-C
 Add as a service
 
