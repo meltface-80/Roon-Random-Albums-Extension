@@ -41,7 +41,9 @@ cd /opt/roon-random-albums && npm install
 # 4. Test by hand FIRST
 
 node index.js         # should print "listening on http://0.0.0.0:3399", Ctrl-C
-Add as a service
+```
+
+# Add as a service
 ```
 sudo nano /etc/systemd/system/roon-random-albums.service
 
@@ -60,38 +62,40 @@ User=root
 
 [Install]
 WantedBy=multi-user.target
+```
 save it, then
-
+```
 sudo systemctl daemon-reload
 sudo systemctl enable --now roon-random-albums
 sudo systemctl status roon-random-albums
 journalctl -u roon-random-albums -f     # live logs (Ctrl-C to exit)
-MacOS
+```
 
-# Install Node (choose one):
+# MacOS
 
-Download the macOS installer from https://nodejs.org  (LTS), OR
-With Homebrew:
-brew install node
+Install Node (choose one):
+- Download the macOS installer from https://nodejs.org  (LTS), OR
+- With Homebrew:
+`brew install node`
 git is usually already present; if not:
-xcode-select --install
-or: brew install git
+`xcode-select --install`    # or: `brew install git`
 
-node --version             # verify v18+
+`node --version`    # verify v18+
+
 Unpack and install
-
+```
 cd ~/Applications            # or wherever you want it
 tar -xzf ~/Downloads/roon-random-albums.tar.gz
 cd roon-random-albums
 npm install
 node index.js               # test — should print the listening line
-
+```
 Open http://localhost:3399 (or http://:3399 from another device)
 
 Auto-start on macOS (launchd, optional)
-Create ~/Library/LaunchAgents/com.local.roon.random-albums.plist
+`Create ~/Library/LaunchAgents/com.local.roon.random-albums.plist`
 
-
+```
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -108,27 +112,37 @@ Create ~/Library/LaunchAgents/com.local.roon.random-albums.plist
   <key>KeepAlive</key>        <true/>
 </dict>
 </plist>
+```
+
 Adjust the node path (which node) and the /Users/YOU/… paths, then:
 
+```
 launchctl load ~/Library/LaunchAgents/com.local.roon.random-albums.plist
-Windows
+```
+
+# Windows
 
 Install Node.js LTS from https://nodejs.org (the installer adds Node to
 your PATH automatically).
 Install Git for Windows from Redirecting….
-Open PowerShell and verify: node --version (should be v18+).
+Open PowerShell and verify: `node --version` (should be v18+).
 Unpack the tarball (right-click → extract, or use 7-Zip), then in PowerShell:
+```
 cd C:\Apps\roon-random-albums      # wherever you extracted it
 npm install
 node index.js                      # test — should print the listening line
+```
 Open http://localhost:3399 (or http://:3399 from another device)
 and enable it in Roon → Settings → Extensions.
 Auto-start on Windows (optional)
 Easiest is NSSM (the Non-Sucking Service Manager):
+```
 # After downloading nssm.exe:
 nssm install RoonRandomAlbums "C:\Program Files\nodejs\node.exe" "C:\Apps\roon-random-albums\index.js"
 nssm set RoonRandomAlbums AppDirectory "C:\Apps\roon-random-albums"
 nssm start RoonRandomAlbums
+```
+
 Or create a Task Scheduler task: “At startup” → start a program →
 node.exe with argument C:\Apps\roon-random-albums\index.js and “Start in”
 set to the app folder.
