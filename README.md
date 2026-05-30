@@ -17,7 +17,7 @@ I love music and between local albums and Qobuz I have a combined album count of
 
 I have a version for Lyrion Music Server and Volumio as well. LMS is my choice which has manual search function as well. I haven’t put search inside the Roon version, I may if the Roon API allows the way I want it.
 
-Download it here from my Dropbox. It works on Linux, MacOS and Windows (not tested yet on MacOS or Windows, but there’s no reason why it should not). Installation instructions after screenshots.
+It works on Linux, MacOS and Windows (not tested yet on MacOS or Windows, but there’s no reason why it should not). Installation instructions after screenshots.
 
 Once installed it’ll show in Roon Extensions setting page. Just enable it.
 
