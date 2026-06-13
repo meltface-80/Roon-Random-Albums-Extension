@@ -2681,6 +2681,25 @@ app.post("/api/volume", (req, res) => {
 // Spotify Connect relay endpoints
 // ---------------------------------------------------------------------------
 
+// Audio stream — Roon Core fetches this URL via AudioInput play() media_url.
+// Using the MAIN Express port (3399) avoids firewall issues from random ports.
+app.get("/relay/audio/:zoneId", (req, res) => {
+  const relay = relays.get(req.params.zoneId);
+  if (!relay || relay.state !== "active") {
+    res.set("Content-Type", "text/plain");
+    return res.status(404).send("No active relay for this zone");
+  }
+  relay.streamToClient(req, res);
+});
+
+// HEAD pre-flight (some HTTP clients probe before GET)
+app.head("/relay/audio/:zoneId", (req, res) => {
+  const relay = relays.get(req.params.zoneId);
+  res.set("Content-Type", "audio/wav");
+  res.set("Transfer-Encoding", "chunked");
+  res.status(relay && relay.state === "active" ? 200 : 404).end();
+});
+
 // Internal: librespot --onevent script POSTs here with track-change metadata.
 app.post("/internal/relay-event", express.json(), (req, res) => {
   res.json({ ok: true }); // respond immediately — librespot doesn't wait
