@@ -2761,3 +2761,15 @@ app.listen(PORT, () => {
   console.log("Make sure to authorise the extension in Roon → Settings → Extensions.");
   if (DEBUG) console.log("Debug logging enabled (RRA_DEBUG=1).");
 });
+
+// Clean up relay child processes (librespot, arecord) on exit.
+// Without this, Ctrl+C leaves orphaned librespot processes running which
+// cause Avahi "Local name collision" errors on the next start.
+async function cleanupAndExit(signal) {
+  console.log(`\n[relay] received ${signal} — stopping all relays`);
+  await Promise.allSettled([...relays.values()].map(r => r.stop()));
+  relays.clear();
+  process.exit(0);
+}
+process.on("SIGINT",  () => cleanupAndExit("SIGINT"));
+process.on("SIGTERM", () => cleanupAndExit("SIGTERM"));
