@@ -1,0 +1,68 @@
+name: Create Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version from package.json
+        id: version
+        run: |
+          VERSION=$(jq -r .version package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if release already exists
+        id: check
+        run: |
+          if gh release view "v${{ steps.version.outputs.version }}" --repo ${{ github.repository }} > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Find tarball asset
+        id: tarball
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          TARBALL=$(ls roon-random-albums-v${{ steps.version.outputs.version }}-docker.tar.gz 2>/dev/null || true)
+          echo "path=$TARBALL" >> $GITHUB_OUTPUT
+
+      - name: Extract changelog section
+        id: notes
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          NOTES=$(awk "/^## \\[$VERSION\\]/,/^## \\[/" CHANGELOG.md | head -n -1 | tail -n +2)
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          TARBALL="${{ steps.tarball.outputs.path }}"
+          if [ -n "$TARBALL" ] && [ -f "$TARBALL" ]; then
+            gh release create "$TAG" "$TARBALL" \
+              --title "Random Albums $TAG" \
+              --notes "${{ steps.notes.outputs.notes }}"
+          else
+            gh release create "$TAG" \
+              --title "Random Albums $TAG" \
+              --notes "${{ steps.notes.outputs.notes }}"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
