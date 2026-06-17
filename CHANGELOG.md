@@ -2,6 +2,25 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.11] — 2026-06-17
+
+### Changed
+- **SQLite label database** — the three JSON cache files (`labels-cache.json`,
+  `labels-mbid.json`, `labels-logo.json`) are replaced by a single
+  `data/cache/labels.db` SQLite database. Writes are immediate and ACID;
+  no more debounce timers or risk of partial writes on crash. Existing JSON
+  caches are migrated automatically on first startup and deleted.
+- **docker-compose.yml** now declares a named `roon-data` volume mounted at
+  `/app/data`. Running `docker-compose up -d` is the recommended install/upgrade
+  path and guarantees label data is never lost across rebuilds.
+- **Dockerfile** installs `python3 make g++` so `better-sqlite3` compiles
+  correctly during `docker build`.
+
+### Fixed
+- Label database (`data/cache/`) is now correctly preserved by the in-app
+  updater's skip list. Upgrading via the settings cog no longer risks losing
+  scan results.
+
 ## [1.5.10] — 2026-06-17
 
 ### Added
