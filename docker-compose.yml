@@ -1,0 +1,13 @@
+services:
+  roon-random-albums:
+    build: .
+    container_name: roon-random-albums
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PORT=3399
+    volumes:
+      - roon-data:/app/data
+
+volumes:
+  roon-data:

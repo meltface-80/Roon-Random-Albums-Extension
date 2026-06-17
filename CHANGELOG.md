@@ -2,6 +2,25 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.12] — 2026-06-17
+
+### Added
+- **Settings info icons** — help text replaced with a small ⓘ button on each
+  settings row. Tapping it shows a toast that auto-closes after 5 seconds or
+  on any tap, freeing up space in the settings panel.
+- **Transport bar persistence** — the mini transport bar now restores its last
+  known track title and artist from `localStorage` immediately on page load,
+  so it appears before the first poll completes after a restart or update.
+
+### Fixed
+- **Radio zone persistence across container recreation** — the random-album-radio
+  toggle state is now also saved to `data/cache/settings.json` inside the Docker
+  volume, so it survives `docker stop`/`docker rm`/`docker run` cycles. Roon's
+  own config is still updated as a secondary copy for backward compatibility.
+- **In-app updater** — a `v1.5.12` git tag is now pushed to GitHub so the
+  built-in updater can detect and install future releases without manual Docker
+  intervention.
+
 ## [1.5.11] — 2026-06-17
 
 ### Changed
