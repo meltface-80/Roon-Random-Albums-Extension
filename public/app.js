@@ -410,6 +410,19 @@
   let currentSource = "random";
   let currentSourceZoneId = null;
 
+  function setModalArtist(subtitle) {
+    modalSub.innerHTML = "";
+    if (!subtitle) return;
+    const btn = document.createElement("button");
+    btn.className = "modal-artist-link";
+    btn.textContent = subtitle;
+    btn.addEventListener("click", () => {
+      closeModal();
+      window.__showArtistAlbums && window.__showArtistAlbums(subtitle);
+    });
+    modalSub.appendChild(btn);
+  }
+
   function openAlbum(album, opts) {
     opts = opts || {};
     currentAlbum = album;
@@ -434,17 +447,7 @@
     showTab("album");
 
     modalTitle.textContent = album.title || "Untitled";
-    modalSub.innerHTML = "";
-    if (album.subtitle) {
-      const artistBtn = document.createElement("button");
-      artistBtn.className = "modal-artist-link";
-      artistBtn.textContent = album.subtitle;
-      artistBtn.addEventListener("click", () => {
-        closeModal();
-        window.__showArtistAlbums && window.__showArtistAlbums(album.subtitle);
-      });
-      modalSub.appendChild(artistBtn);
-    }
+    setModalArtist(album.subtitle);
     modalActs.innerHTML    = isNP ? "" : `<div class="modal-loading">Loading…</div>`;
     modalTracks.innerHTML  = "";
 
@@ -511,7 +514,7 @@
     const j = await r.json();
     if (j.album) {
       if (j.album.title)    modalTitle.textContent = j.album.title;
-      if (j.album.subtitle) modalSub.textContent   = j.album.subtitle;
+      if (j.album.subtitle) setModalArtist(j.album.subtitle);
       if (j.album.image_key) {
         modalImg.src = `/api/image/${encodeURIComponent(j.album.image_key)}?size=800`;
       }
@@ -649,10 +652,15 @@
     }
     const j = await r.json();
 
-    // Update title/subtitle from server in case of any mismatch
-    if (j.album) {
-      if (j.album.title)    modalTitle.textContent = j.album.title;
-      if (j.album.subtitle) modalSub.textContent   = j.album.subtitle;
+    // Only accept server title if it matches what we expected — guards against
+    // stale index offsets returning a completely different album after a library change.
+    if (j.album && j.album.title) {
+      const expectedNorm = currentAlbum ? (currentAlbum.title || "").toLowerCase().trim() : "";
+      const returnedNorm = (j.album.title || "").toLowerCase().trim();
+      if (!expectedNorm || returnedNorm === expectedNorm) {
+        modalTitle.textContent = j.album.title;
+        // Subtitle already set as a clickable button by openAlbum(); don't overwrite.
+      }
     }
 
     // Build action buttons in preferred order

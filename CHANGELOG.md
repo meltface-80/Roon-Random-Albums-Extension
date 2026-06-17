@@ -2,6 +2,21 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.16] — 2026-06-17
+
+### Fixed
+- **Artist name link** — artist name in the album modal is now always a
+  clickable link. Previously it flashed blue on open then reverted to plain
+  text because the detail-fetch response was overwriting the button with a raw
+  text node. A dedicated `setModalArtist()` helper is now used consistently
+  everywhere the subtitle is set.
+- **Wrong album opened for offset-shifted entries** — if the album index has a
+  stale offset (e.g. after adding albums to the library), the detail fetch
+  could return a completely different album and overwrite the modal title and
+  artist with wrong data. The returned title is now compared to the expected
+  title and ignored if it doesn't match, keeping the correct header while
+  the user can trigger a re-index to restore full consistency.
+
 ## [1.5.15] — 2026-06-17
 
 ### Fixed
