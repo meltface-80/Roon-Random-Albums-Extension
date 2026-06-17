@@ -16,15 +16,15 @@ Includes **instant whole-library search** (see below). Roon-style dark theme
 Each release ships a `*-docker.tar.gz`. Download it, build the image, and run:
 
 ```bash
-wget https://raw.githubusercontent.com/meltface-80/Roon-Random-Albums-Extension/main/roon-random-albums-v1.5.10-docker.tar.gz
-tar -xzf roon-random-albums-v1.5.10-docker.tar.gz
+wget https://raw.githubusercontent.com/meltface-80/Roon-Random-Albums-Extension/main/roon-random-albums-v1.5.8-docker.tar.gz
+tar -xzf roon-random-albums-v1.5.8-docker.tar.gz
 cd roon-random-albums
-docker build -t roon-random-albums:1.5.10 .
+docker build -t roon-random-albums:1.5.8 .
 docker run -d \
   --name roon-random-albums \
   --restart unless-stopped \
   --network host \
-  roon-random-albums:1.5.10
+  roon-random-albums:1.5.8
 ```
 
 `--network host` is required so the extension can discover your Roon Core on
