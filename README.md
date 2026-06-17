@@ -1,4 +1,5 @@
-# Random Albums — a Roon extension
+# Random Albums
+A Roon extension
 
 A web UI that shows a screenful of random albums from your Roon library, with
 **Play Now**, **Add to Queue**, **Play Next**, **Shuffle**, and **Start Radio**
