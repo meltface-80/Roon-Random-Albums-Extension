@@ -2219,6 +2219,81 @@
 })();
 
 /* ------------------------------------------------------------------ */
+/*  Docker migration banner — shown on native (non-Docker) installs   */
+/* ------------------------------------------------------------------ */
+(function initDockerMigration() {
+  const banner    = document.getElementById("docker-banner");
+  const codeEl    = document.getElementById("docker-banner-code");
+  const copyBtn   = document.getElementById("docker-copy-btn");
+  const dismissBtn = document.getElementById("docker-dismiss-btn");
+  if (!banner) return;
+
+  const DISMISS_KEY = "rra-docker-migrated";
+  if (localStorage.getItem(DISMISS_KEY)) return;
+
+  function buildCommands(version) {
+    const v = version || "1.5.10";
+    const base = "https://raw.githubusercontent.com/meltface-80/Roon-Random-Albums-Extension/main";
+    return [
+      "# 1. Install Docker if needed",
+      "#    DietPi:  sudo dietpi-software install 162",
+      "#    Other:   curl -sSL https://get.docker.com | sh",
+      "",
+      "# 2. Download and build the Docker image",
+      `wget ${base}/roon-random-albums-v${v}-docker.tar.gz`,
+      `tar -xzf roon-random-albums-v${v}-docker.tar.gz`,
+      "cd roon-random-albums",
+      `docker build -t roon-random-albums:${v} .`,
+      "",
+      "# 3. Run the container",
+      `docker run -d --name roon-random-albums --restart unless-stopped --network host roon-random-albums:${v}`,
+      "",
+      "# 4. Stop and disable the native service",
+      "sudo systemctl stop roon-random-albums",
+      "sudo systemctl disable roon-random-albums",
+    ].join("\n");
+  }
+
+  async function init() {
+    try {
+      const r = await fetch("/api/update/status", { cache: "no-store" });
+      if (!r.ok) return;
+      const s = await r.json();
+      if (s.is_docker) return;   // running in Docker already — nothing to do
+
+      const version = s.latest || s.current;
+      const cmds = buildCommands(version);
+      if (codeEl) codeEl.textContent = cmds;
+
+      banner.classList.remove("hidden");
+
+      if (copyBtn) {
+        copyBtn.addEventListener("click", () => {
+          navigator.clipboard.writeText(cmds).then(() => {
+            const orig = copyBtn.querySelector("span") ? copyBtn.querySelector("span").textContent : copyBtn.textContent;
+            if (copyBtn.querySelector("span")) copyBtn.querySelector("span").textContent = "Copied!";
+            else copyBtn.textContent = "Copied!";
+            setTimeout(() => {
+              if (copyBtn.querySelector("span")) copyBtn.querySelector("span").textContent = orig;
+              else copyBtn.textContent = orig;
+            }, 2000);
+          }).catch(() => {});
+        });
+      }
+
+      if (dismissBtn) {
+        dismissBtn.addEventListener("click", () => {
+          localStorage.setItem(DISMISS_KEY, "1");
+          banner.classList.add("hidden");
+        });
+      }
+    } catch (e) {}
+  }
+
+  init();
+})();
+
+/* ------------------------------------------------------------------ */
 /*  Settings sheet: theme toggle (lives here now), version, repo link  */
 /* ------------------------------------------------------------------ */
 (function initSettings() {
@@ -2280,6 +2355,64 @@
         if (s && s.current) { versionEl.textContent = "Roon Random Albums v" + s.current; versionLoaded = true; }
       }
     } catch (e) {}
+  }
+
+  // Update button in the settings footer
+  const updateBtn = document.getElementById("settings-update-btn");
+  if (updateBtn) {
+    let updateState = "idle"; // idle | checking | ready | applying
+    let pendingVersion = null;
+
+    function resetUpdateBtn() {
+      updateState = "idle"; pendingVersion = null;
+      updateBtn.disabled = false;
+      updateBtn.textContent = "Check for updates";
+      updateBtn.classList.remove("has-update");
+    }
+
+    updateBtn.addEventListener("click", async () => {
+      if (updateState === "checking" || updateState === "applying") return;
+
+      if (updateState === "ready" && pendingVersion) {
+        // Second click — apply the update
+        updateState = "applying";
+        updateBtn.disabled = true;
+        updateBtn.textContent = "Installing…";
+        try {
+          await fetch("/api/update/apply", { method: "POST" });
+          updateBtn.textContent = "Restarting…";
+          // The update toast takes over polling/progress from here
+        } catch (e) {
+          resetUpdateBtn();
+        }
+        return;
+      }
+
+      // First click — check for updates
+      updateState = "checking";
+      updateBtn.disabled = true;
+      updateBtn.textContent = "Checking…";
+      try {
+        const r = await fetch("/api/update/status", { cache: "no-store" });
+        if (!r.ok) throw new Error("bad status");
+        const s = await r.json();
+        if (s.available && s.latest) {
+          updateState = "ready";
+          pendingVersion = s.latest;
+          updateBtn.textContent = "Install v" + s.latest;
+          updateBtn.classList.add("has-update");
+          updateBtn.disabled = false;
+          // Also refresh the version label in case it was stale
+          if (versionEl && s.current) versionEl.textContent = "Roon Random Albums v" + s.current;
+        } else {
+          updateBtn.textContent = "Up to date ✓";
+          setTimeout(resetUpdateBtn, 2500);
+        }
+      } catch (e) {
+        updateBtn.textContent = "Check failed";
+        setTimeout(resetUpdateBtn, 2500);
+      }
+    });
   }
 
   const open = () => { loadRadio(); loadVersion(); overlay.classList.remove("hidden"); };
