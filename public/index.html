@@ -123,6 +123,21 @@
     </div>
   </div>
 
+  <!-- Docker migration banner — visible on native (non-Docker) installs only -->
+  <div id="docker-banner" class="docker-banner hidden" role="alert" aria-live="polite">
+    <div class="docker-banner-inner">
+      <div class="docker-banner-text">
+        <strong>This extension now runs in Docker</strong>
+        <span>Native installs will stop receiving updates. Migrate in a couple of minutes using the commands below.</span>
+      </div>
+      <pre class="docker-banner-code" id="docker-banner-code"></pre>
+      <div class="docker-banner-actions">
+        <button id="docker-copy-btn" class="primary-btn" type="button">Copy commands</button>
+        <button id="docker-dismiss-btn" class="icon-btn docker-dismiss" type="button">I've migrated</button>
+      </div>
+    </div>
+  </div>
+
   <main>
     <div id="labels-bar" class="labels-bar hidden">
       <button id="labels-back" class="labels-back" type="button" aria-label="Back to all labels">

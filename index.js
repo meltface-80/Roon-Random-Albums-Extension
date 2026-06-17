@@ -1981,7 +1981,7 @@ app.post("/api/reindex", async (req, res) => {
 // Self-update endpoints (does not require a paired Core)
 // ---------------------------------------------------------------------------
 app.get("/api/update/status", (req, res) => {
-  res.json(updater.getStatus());
+  res.json({ ...updater.getStatus(), is_docker: process.env.DOCKER === "1" });
 });
 
 app.post("/api/update/check", async (req, res) => {

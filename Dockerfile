@@ -15,6 +15,7 @@ COPY public/ ./public/
 COPY data/ ./data/
 
 ENV PORT=3399
+ENV DOCKER=1
 EXPOSE 3399
 
 CMD ["node", "launcher.js"]

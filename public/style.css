@@ -242,6 +242,33 @@ button { font-family: inherit; }
 .update-actions.busy { opacity: .7; pointer-events: none; }
 
 /* ------------------------------------------------------------------ */
+/*  Docker migration banner                                            */
+/* ------------------------------------------------------------------ */
+.docker-banner {
+  flex: 0 0 auto;
+  background: color-mix(in srgb, #f59e0b 14%, var(--bg-base));
+  border-bottom: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
+  padding: 16px 20px;
+}
+.docker-banner.hidden { display: none; }
+.docker-banner-inner { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.docker-banner-text { display: flex; flex-direction: column; gap: 4px; }
+.docker-banner-text strong { font-size: 14px; color: #fbbf24; }
+.docker-banner-text span { font-size: 13px; color: var(--text-dim); line-height: 1.45; }
+.docker-banner-code {
+  margin: 0; padding: 12px 14px; border-radius: 10px;
+  background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08);
+  font-family: "SF Mono", "Fira Mono", "Consolas", monospace;
+  font-size: 12px; line-height: 1.65; color: var(--text);
+  white-space: pre; overflow-x: auto;
+}
+.docker-banner-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.docker-banner-actions .primary-btn { width: auto; padding: 0 16px; height: 36px; }
+.docker-banner-actions .primary-btn span { display: inline; }
+.docker-dismiss { width: auto; padding: 0 14px; height: 36px; border-radius: 10px; font-size: 13px; color: var(--text-dim); }
+.docker-dismiss:hover { color: var(--text); }
+
+/* ------------------------------------------------------------------ */
 /*  Status banner                                                      */
 /* ------------------------------------------------------------------ */
 .status-banner {
