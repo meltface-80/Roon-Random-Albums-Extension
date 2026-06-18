@@ -2,7 +2,7 @@
 
 All notable changes to Roon Random Albums are documented here.
 
-## [1.5.24] — 2026-06-18
+## [1.5.27] — 2026-06-18
 
 ### Fixed
 - **Listening statistics never recorded** — `scrobbleUpdate` read
