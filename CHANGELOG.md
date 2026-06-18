@@ -2,6 +2,12 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.0] — 2026-06-18
+
+### Fixed
+- **Extension publisher name** — the Roon → Settings → Extensions list now
+  correctly shows **MusicD** as the publisher instead of "self".
+
 ## [1.5.31] — 2026-06-18
 
 ### Added

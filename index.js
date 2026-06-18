@@ -54,8 +54,8 @@ const roon = new RoonApi({
   extension_id:        "com.local.roon.random-albums",
   display_name:        "Random Albums",
   display_version:     pkg.version,
-  publisher:           "self",
-  email:               "you@example.com",
+  publisher:           "MusicD",
+  email:               "hello@musicd.app",
   log_level:           "none",
 
   core_paired: function (c) {
