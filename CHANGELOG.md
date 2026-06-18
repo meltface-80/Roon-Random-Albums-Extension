@@ -19,6 +19,10 @@ All notable changes to Roon Random Albums are documented here.
 - **Debug endpoint** — added `GET /api/debug/album-items?offset=N` which dumps
   the raw browse items Roon returns when entering an album, making it easy to
   diagnose browse API structure issues without code changes.
+- **Updater 415 error** — POST requests to `/api/update/apply`,
+  `/api/update/check`, and `/api/album/love` now send `Content-Type: application/json`.
+  iOS Safari was supplying an implicit content type on body-less POSTs that
+  Express's json() middleware rejected with 415 Unsupported Media Type.
 
 ## [1.5.19] — 2026-06-18
 

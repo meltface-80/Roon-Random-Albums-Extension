@@ -688,7 +688,7 @@
       const album = currentAlbum;
       if (!album) return;
       loveBtn.classList.add("is-loading");
-      fetch(`/api/album/love?offset=${album.offset}`, { method: "POST" })
+      fetch(`/api/album/love?offset=${album.offset}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
         .then(r => r.json())
         .then(j => {
           loveBtn.classList.remove("is-loading");
@@ -2232,7 +2232,7 @@
     btnNow.disabled = true;
     showProgress("checking");
     try {
-      const r = await fetch("/api/update/apply", { method: "POST" });
+      const r = await fetch("/api/update/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       const s = await r.json().catch(() => null);
       if (!r.ok) {
         applying = false; actions.classList.remove("busy"); btnNow.disabled = false;
@@ -2346,7 +2346,7 @@
     btn.disabled = true;
     btn.textContent = "Checking…";
     try {
-      await fetch("/api/update/check", { method: "POST" });
+      await fetch("/api/update/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       const r = await fetch("/api/update/status", { cache: "no-store" });
       const s = await r.json();
       if (s && s.available && s.latest) {
