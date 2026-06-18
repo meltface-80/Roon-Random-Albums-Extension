@@ -1736,7 +1736,7 @@ main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 /* ------------------------------------------------------------------ */
 .stats-panel {
   position: fixed; inset: 0; z-index: 200;
-  background: var(--bg-page);
+  background: var(--bg);
   display: flex; flex-direction: column;
   overflow: hidden;
 }

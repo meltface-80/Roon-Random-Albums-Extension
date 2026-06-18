@@ -2,6 +2,13 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.22] — 2026-06-18
+
+### Fixed
+- **Stats panel transparent background** — `var(--bg-page)` was used but never
+  defined, causing the stats screen to show the album grid through it.
+  Corrected to `var(--bg)`, the app's standard page background colour.
+
 ## [1.5.21] — 2026-06-18
 
 ### Changed
