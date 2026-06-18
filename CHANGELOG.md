@@ -2,6 +2,16 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.24] — 2026-06-18
+
+### Fixed
+- **Listening statistics never recorded** — `scrobbleUpdate` read
+  `now_playing.line1 / line2 / line3` directly, but Roon nests those strings
+  inside `now_playing.three_line.line1` etc. The guard `np && np.line1` was
+  always falsy, so zero plays were ever written to SQLite and the stats page
+  showed nothing. Fixed to use the same `three_line` / `one_line` property
+  paths already used elsewhere (e.g. the transport API endpoint).
+
 ## [1.5.23] — 2026-06-18
 
 ### Fixed

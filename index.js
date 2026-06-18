@@ -2228,10 +2228,17 @@ function scrobbleUpdate(z) {
   const zid   = z && z.zone_id;
   if (!zid) return;
 
+  // Roon nests now_playing text in three_line / one_line sub-objects.
+  const tl    = (np && np.three_line) || {};
+  const ol    = (np && np.one_line)   || {};
+  const track  = tl.line1 || ol.line1 || "";
+  const artist = tl.line2 || "";
+  const album  = tl.line3 || "";
+
   const prev = scrobbleState.get(zid);
 
-  if (state === "playing" && np && np.line1) {
-    if (!prev || prev.track !== np.line1 || prev.album !== (np.line3 || "")) {
+  if (state === "playing" && np && track) {
+    if (!prev || prev.track !== track || prev.album !== album) {
       // New track — complete previous if it qualifies
       if (prev && prev.playId && prev.elapsed >= 30 &&
           (prev.elapsed >= (prev.duration || 0) * 0.5 || prev.elapsed >= 240)) {
@@ -2242,13 +2249,13 @@ function scrobbleUpdate(z) {
       try {
         const info = stmtInsertPlay.run(
           Date.now(), z.display_name || zid,
-          np.line1 || "", np.line2 || "", np.line3 || "",
+          track, artist, album,
           np.image_key || "", np.length || 0
         );
         playId = info.lastInsertRowid;
       } catch (e) {}
       scrobbleState.set(zid, {
-        track: np.line1, artist: np.line2 || "", album: np.line3 || "",
+        track, artist, album,
         image_key: np.image_key || "", duration: np.length || 0,
         playId, elapsed: 0, lastSeekPos: np.seek_position || 0
       });
