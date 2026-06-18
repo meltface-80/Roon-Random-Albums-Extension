@@ -1134,14 +1134,11 @@
       return Number.isFinite(v) && v > 0 ? v : 1;
     }
 
-    const mainEl = document.querySelector("main");
-
     function exitLabels() {
       mode = null;
       labelsActive = false;
       labelsBtn.classList.remove("is-active");
       if (labelsBar) labelsBar.classList.add("hidden");
-      if (mainEl) mainEl.classList.remove("labels-mode");
     }
     window.__exitLabels = exitLabels;
 
@@ -1150,7 +1147,6 @@
       labelsActive = true;
       labelsBtn.classList.add("is-active");
       if (labelsBar) labelsBar.classList.add("hidden");
-      if (mainEl) mainEl.classList.add("labels-mode");
       setBanner(null);
       setCountText("Labels");
       renderSkeletons(computeAlbumCount());
@@ -1265,7 +1261,6 @@
       labelsActive = true;
       labelsBtn.classList.add("is-active");
       if (labelsBar)   labelsBar.classList.remove("hidden");
-      if (mainEl) mainEl.classList.add("labels-mode");
       if (labelsTitle) labelsTitle.textContent = name;
       setBanner(null);
       setCountText(name);

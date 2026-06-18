@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.4] — 2026-06-18
+
+### Changed
+- **Phone portrait layout reverted** — removed the immersive full-viewport album grid (art-covers-tile with gradient overlay) that was introduced in v1.5.31. Phones in portrait now use the standard two-column scrollable tile grid, matching the pre-v1.5.31 layout. This also resolves the labels browser being invisible on phone portrait.
+
 ## [1.6.3] — 2026-06-18
 
 ### Fixed

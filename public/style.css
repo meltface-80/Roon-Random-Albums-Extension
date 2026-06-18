@@ -289,45 +289,9 @@ main {
   gap: 14px 10px;
 }
 
-/* Phone portrait: 2×3 grid, tiles fill the entire viewport between bars.
-   Art covers the full tile; title/artist overlay at the bottom. */
+/* Phone portrait: 2-column scrollable grid */
 @media (max-width: 767px) and (orientation: portrait) {
-  main { overflow: hidden; padding: 6px; }
-  .album-grid {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr 1fr;
-    gap: 6px;
-    height: 100%;
-  }
-  .album {
-    position: relative; overflow: hidden;
-    border-radius: 14px; min-height: 0;
-    transition: transform .18s ease;
-  }
-  .album-art-wrap {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    aspect-ratio: unset; border-radius: 0; box-shadow: none;
-  }
-  .album-meta {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    background: linear-gradient(0deg, rgba(0,0,0,.82) 0%, transparent 100%);
-    padding: 28px 10px 10px; margin-top: 0;
-  }
-  .album-title { color: #fff; font-size: 12px; }
-  .album-artist { color: rgba(255,255,255,.65); font-size: 11px; }
-  .album:hover .album-art-wrap { transform: none; box-shadow: none; }
-}
-
-/* Labels browser on phone portrait: restore normal scrollable layout */
-@media (max-width: 767px) and (orientation: portrait) {
-  main.labels-mode { overflow-y: auto; padding: 14px; }
-  main.labels-mode .album-grid { height: auto; grid-template-rows: unset; grid-template-columns: 1fr 1fr; }
-  main.labels-mode .album { position: unset; overflow: unset; }
-  main.labels-mode .album-art-wrap { position: relative; inset: unset; width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
-  main.labels-mode .album-meta { position: unset; background: none; padding: 0; margin-top: 8px; }
-  main.labels-mode .album-title { color: var(--text); font-size: 12px; }
-  main.labels-mode .album-artist { color: var(--text-dim); font-size: 11px; }
+  .album-grid { grid-template-columns: 1fr 1fr; }
 }
 
 /* ── Tablet portrait: 5×5 ───────────────────────────────────────── */
