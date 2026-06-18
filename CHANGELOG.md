@@ -2,6 +2,19 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.21] — 2026-06-18
+
+### Changed
+- **Statistics** — moved from the topbar bar-chart icon into the Settings panel.
+  Tap *View stats* in Settings to open the full-screen stats view. The ✕ button
+  in the top-right corner of the stats screen returns you to the album grid.
+
+### Removed
+- **Heart / love button** — removed. The Roon browse API did not expose a love
+  action at the album browse level (button was always greyed-out and untappable).
+  Use `/api/debug/album-items?offset=N` if you want to investigate the browse
+  structure for a future re-implementation.
+
 ## [1.5.20] — 2026-06-18
 
 ### Fixed
