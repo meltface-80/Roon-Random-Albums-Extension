@@ -2,6 +2,23 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.31] — 2026-06-18
+
+### Fixed
+- **Roon extension publisher** — changed `extension_id` from `com.local.*` to `com.musicd.*` so Roon's Extensions list now shows "MusicD" instead of "Self".
+- **Now-playing album link** — tapping the album name on the Now Playing screen no longer triggers "Valid offset query parameter required". The handler now only opens the album detail when a valid index match with an offset is found; otherwise shows a brief toast.
+- **Labels screen flickering** — eliminated the blank-then-reload flash that occurred every 4–5 seconds while the label scan was running. Skeletons are only shown on the first open; subsequent polls only re-render when the label count actually changes.
+- **Share card text size** — increased release-date label (20 → 26 px), album title (48 → 56 px), and artist (30 → 37 px) for better readability.
+- **Share card MusicD wordmark** — removed the "MusicD" text fallback from the share card.
+- **Play unheard tooltip** — removed `title` attribute from the compass button; the text tooltip no longer appears on tap.
+- **Grid album counts** — corrected `computeAlbumCount()`: desktop now returns 45 (9 × 5), tablet portrait returns 20 (5 × 4); tablet landscape (7 × 3 = 21) and phone portrait (2 × 3 = 6) unchanged.
+
+### Added
+- **Album count in topbar** — the total number of albums in your library (or the active filter) is now shown as a bold label on the left side of the topbar, white on dark and black on light.
+
+### Changed
+- **Labels scan speed** — increased concurrent iTunes lookup batch from 6 to 20 albums, significantly reducing scan time for large libraries.
+
 ## [1.5.30] — 2026-06-18
 
 ### Added

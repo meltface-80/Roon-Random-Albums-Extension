@@ -28,6 +28,7 @@
   <div class="app">
   <header class="topbar">
     <div class="topbar-row">
+      <span id="album-count" class="album-count hidden" aria-live="polite"></span>
       <div class="topbar-controls">
         <button id="filter-toggle" class="icon-btn" aria-label="Filter albums" title="Filter">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -44,7 +45,7 @@
           </svg>
         </button>
 
-        <button id="play-unheard-topbar" class="icon-btn" aria-label="Play something unheard" title="Play unheard">
+        <button id="play-unheard-topbar" class="icon-btn" aria-label="Play something unheard">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="10"/>

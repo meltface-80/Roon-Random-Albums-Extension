@@ -76,10 +76,10 @@
 
   // ----- Sizing -----
   // Returns a fixed album count that exactly fills the responsive grid:
-  //   Phone portrait  → 2×3 = 6  (fills screen, art overlays meta)
-  //   Tablet portrait → 5×5 = 25
-  //   Tablet landscape → 7×3 = 21
-  //   Desktop          → 9×4 = 36
+  //   Phone portrait   → 2×3  = 6   (fills screen, art overlays meta)
+  //   Tablet portrait  → 5×4  = 20
+  //   Tablet landscape → 7×3  = 21
+  //   Desktop          → 9×5  = 45
   function computeAlbumCount() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -90,10 +90,10 @@
     if (minDim < 768) return 6;     // 2×3, fills screen — landscape is blocked via CSS overlay
 
     // Desktop (width ≥ 1200 px)
-    if (w >= 1200) return 36;       // 9×4
+    if (w >= 1200) return 45;       // 9×5
 
     // Tablet (768–1199 px)
-    return isLandscape ? 21 : 25;   // 7×3 or 5×5
+    return isLandscape ? 21 : 20;   // 7×3 or 5×4
   }
 
   // ----- Toast / banner -----
@@ -1125,6 +1125,7 @@
       '<line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
 
     let mode = null;   // null | "list" | "albums"
+    let _lastLabelCount = -1;  // track last rendered count to avoid flicker on re-poll
 
     function labelOrder() {
       return localStorage.getItem("rra-label-order") === "random" ? "random" : "alpha";
@@ -1137,19 +1138,20 @@
     function exitLabels() {
       mode = null;
       labelsActive = false;
+      _lastLabelCount = -1;
       labelsBtn.classList.remove("is-active");
       if (labelsBar) labelsBar.classList.add("hidden");
     }
     window.__exitLabels = exitLabels;
 
-    async function showLabelsList() {
+    async function showLabelsList(isRepoll = false) {
       mode = "list";
       labelsActive = true;
       labelsBtn.classList.add("is-active");
       if (labelsBar) labelsBar.classList.add("hidden");
       setBanner(null);
       setCountText("Labels");
-      renderSkeletons(computeAlbumCount());
+      if (!isRepoll) { renderSkeletons(computeAlbumCount()); _lastLabelCount = -1; }
       try {
         const r = await fetch("/api/filters/labels");
         const j = await r.json();
@@ -1158,14 +1160,14 @@
         const labels = (j.labels || []).filter(lb => (lb.albumCount || 1) >= minAlbums);
         const pct = Math.round((j.progress || 0) * 100);
         if (!labels.length) {
-          grid.innerHTML = "";
+          if (!isRepoll) grid.innerHTML = "";
           if (j.scanning) {
             const msg = pct > 0
               ? "Scanning your library for record labels… " + pct + "% complete."
               : "Building library index… labels will appear once the scan starts.";
             setBanner(msg, false);
             // Re-poll every 4 s while the scan is running
-            setTimeout(() => { if (mode === "list") showLabelsList(); }, 4000);
+            setTimeout(() => { if (mode === "list") showLabelsList(true); }, 4000);
           } else {
             setBanner("No labels found yet — the background scan looks up labels via iTunes and MusicBrainz. This can take a few minutes for large libraries.", false);
             // Show a rescan button so the user can retry without restarting the server.
@@ -1179,7 +1181,8 @@
               try {
                 await fetch("/api/labels/rescan", { method: "POST",
                   headers: { "Content-Type": "application/json" }, body: "{}" });
-                setTimeout(() => { if (mode === "list") showLabelsList(); }, 1000);
+                _lastLabelCount = -1;
+                setTimeout(() => { if (mode === "list") showLabelsList(false); }, 1000);
               } catch (e) { rescanBtn.disabled = false; rescanBtn.textContent = "Rescan now"; }
             });
             grid.appendChild(rescanBtn);
@@ -1191,15 +1194,17 @@
         renderLabelTiles(labels);
         // Keep refreshing while the scan adds more labels
         if (j.scanning) {
-          setTimeout(() => { if (mode === "list") showLabelsList(); }, 5000);
+          setTimeout(() => { if (mode === "list") showLabelsList(true); }, 5000);
         }
       } catch (e) {
-        grid.innerHTML = "";
+        if (!isRepoll) grid.innerHTML = "";
         setBanner("Couldn't load labels: " + e.message, true);
       }
     }
 
     function renderLabelTiles(labels) {
+      if (labels.length === _lastLabelCount) return; // no new labels — skip re-render
+      _lastLabelCount = labels.length;
       grid.innerHTML = "";
       const frag = document.createDocumentFragment();
       for (const lb of labels) {
@@ -1417,7 +1422,6 @@
       if (!np || typeof window.__openAlbum !== "function") return;
       const albumTitle = np.line3 || "";
       const artist     = np.line2 || "";
-      const imageKey   = np.image_key;
       if (!albumTitle) return;
       const norm = s => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
       try {
@@ -1430,12 +1434,12 @@
                          artist && norm(a.subtitle).includes(norm(artist.split(" ")[0]))) ||
             rs.find(a => norm(a.title) === norm(albumTitle)) ||
             rs[0];
-          if (match) { window.__openAlbum(match, { source: "search" }); return; }
+          if (match && typeof match.offset === "number") {
+            window.__openAlbum(match, { source: "search" }); return;
+          }
         }
       } catch (e) {}
-      // Fallback: open with image_key only (shows art, no track list)
-      window.__openAlbum({ title: albumTitle, subtitle: artist, image_key: imageKey },
-                          { source: "search" });
+      if (window.__showToast) window.__showToast("Album not yet indexed — try again in a moment");
     });
   }
 

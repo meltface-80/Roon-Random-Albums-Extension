@@ -125,18 +125,18 @@ const ShareCard = (() => {
     // --- Measure text blocks ---
     const releaseStr = formatReleaseDate(data.releaseRaw);
     const metaText   = releaseStr ? 'Released ' + releaseStr : null;
-    const META_SIZE  = 20;
+    const META_SIZE  = 26;
     const META_H     = META_SIZE + 4;
-    const META_GAP   = 22;   // gap below the year line
+    const META_GAP   = 24;   // gap below the year line
 
-    const TITLE_SIZE = 48;
-    const TITLE_LH   = 58;
+    const TITLE_SIZE = 56;
+    const TITLE_LH   = 68;
     ctx.font = `700 ${TITLE_SIZE}px "Manrope", sans-serif`;
     const titleLines = wrapText(ctx, data.title || '', TEXT_W, 3);
     const titleH = titleLines.length * TITLE_LH;
 
-    const ARTIST_SIZE = 30;
-    const ARTIST_LH   = 40;
+    const ARTIST_SIZE = 37;
+    const ARTIST_LH   = 48;
     ctx.font = `400 ${ARTIST_SIZE}px "Manrope", sans-serif`;
     const artistLines = wrapText(ctx, 'by ' + (data.artist || ''), TEXT_W, 2);
     const artistH = artistLines.length * ARTIST_LH;
@@ -170,7 +170,7 @@ const ShareCard = (() => {
     ctx.font = `400 ${ARTIST_SIZE}px "Manrope", sans-serif`;
     artistLines.forEach((line, i) => ctx.fillText(line, TEXT_X, ry + i * ARTIST_LH));
 
-    // --- Wordmark pinned bottom-right ---
+    // --- Wordmark pinned bottom-right (only if a wordmark image was supplied) ---
     if (wm) {
       const wmH = Math.round(WORDMARK_W * (wm.height / wm.width));
       ctx.globalAlpha = 0.88;
@@ -180,16 +180,6 @@ const ShareCard = (() => {
         CARD_H - WORDMARK_PAD - wmH,
         WORDMARK_W, wmH
       );
-      ctx.globalAlpha = 1;
-    } else {
-      ctx.globalAlpha = 0.75;
-      ctx.font = 'bold 20px system-ui,-apple-system,sans-serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('MusicD', CARD_W - WORDMARK_PAD, CARD_H - WORDMARK_PAD + 4);
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'alphabetic';
       ctx.globalAlpha = 1;
     }
 

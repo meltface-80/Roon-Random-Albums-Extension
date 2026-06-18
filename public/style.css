@@ -86,7 +86,7 @@ button { font-family: inherit; }
   border-bottom: 1px solid var(--border);
 }
 .topbar-row {
-  display: flex; align-items: center; justify-content: flex-end;
+  display: flex; align-items: center; justify-content: space-between;
   gap: 12px;
 }
 [data-theme="light"] .topbar { background: rgba(246,245,242,.85); }
@@ -100,12 +100,16 @@ button { font-family: inherit; }
   color: var(--text);
 }
 .album-count {
-  font-size: 11px;
-  color: var(--text-faint);
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
   font-variant-numeric: tabular-nums;
   letter-spacing: .02em;
-  margin-top: 2px;
+  white-space: nowrap;
+  min-width: 0;
+  flex-shrink: 1;
 }
+[data-theme="light"] .album-count { color: #000000; }
 .album-count.hidden { display: none; }
 
 .topbar-controls {

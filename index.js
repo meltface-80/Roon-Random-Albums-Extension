@@ -51,7 +51,7 @@ let outputs   = {};
 const scrobbleState = new Map();
 
 const roon = new RoonApi({
-  extension_id:        "com.local.roon.random-albums",
+  extension_id:        "com.musicd.roon.random-albums",
   display_name:        "Random Albums",
   display_version:     pkg.version,
   publisher:           "MusicD",
@@ -1069,9 +1069,9 @@ async function runLabelsIndexScan() {
     labelsIndex.progress = (alreadyDone + done) / total;
   };
 
-  // Run 6 albums concurrently — iTunes handles this fine.
+  // Run 20 albums concurrently — iTunes handles this fine.
   // MusicBrainz fallback serialises itself via mbWait(), so no overload risk.
-  const SCAN_BATCH = 6;
+  const SCAN_BATCH = 20;
   for (let i = 0; i < toScan.length; i += SCAN_BATCH) {
     await Promise.allSettled(toScan.slice(i, i + SCAN_BATCH).map(processAlbum));
   }
