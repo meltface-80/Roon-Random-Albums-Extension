@@ -2,6 +2,27 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.31] — 2026-06-18
+
+### Added
+- **Splash screen** — on every page load the app shows the duck head logo and
+  MusicD wordmark with an animated waveform. The splash fades out after albums
+  render (minimum 1.6 s branding moment; auto-clears after 7 s if Roon is slow
+  to connect).
+- **Animated compass** — tapping the "Play unheard" button spins the compass
+  icon for 2 seconds (two full rotations with a smooth ease) before the album
+  starts playing, giving clear visual feedback that something is happening.
+
+### Changed
+- **Topbar decluttered** — MusicD logo and library album count removed from the
+  header. The toolbar icons now occupy the full header row with more breathing
+  room on all device sizes.
+- **Phone grid: 2 × 3 filling the screen** — portrait phones now show 6 albums
+  in a 2-column, 3-row grid. The tiles fill the full viewport between the topbar
+  and transport bar with no scrolling; album art covers the tile edge-to-edge and
+  the title/artist text overlays from the bottom (matching the Option C concept).
+  Tablet and desktop layouts are unchanged.
+
 ## [1.5.30] — 2026-06-18
 
 ### Added

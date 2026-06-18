@@ -86,7 +86,7 @@ button { font-family: inherit; }
   border-bottom: 1px solid var(--border);
 }
 .topbar-row {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: flex-end;
   gap: 12px;
 }
 [data-theme="light"] .topbar { background: rgba(246,245,242,.85); }
@@ -289,18 +289,35 @@ main {
   gap: 14px 10px;
 }
 
-/* Phone portrait: scale the row gap with screen height (capped) so the
-   3×3 wall fills the space above the mini bar without huge gaps, and a
-   3-line bottom-row tile still clears the bar. */
+/* Phone portrait: 2×3 grid, tiles fill the entire viewport between bars.
+   Art covers the full tile; title/artist overlay at the bottom. */
 @media (max-width: 767px) and (orientation: portrait) {
+  main { overflow: hidden; padding: 6px; }
   .album-grid {
-    gap: clamp(16px, 3.6vh, 34px) 10px;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    gap: 6px;
+    height: 100%;
   }
-}
-
-/* ── Tiny phones ────────────────────────────────────────────────── */
-@media (max-width: 359px) {
-  .album-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; }
+  .album {
+    position: relative; overflow: hidden;
+    border-radius: 14px; min-height: 0;
+    transition: transform .18s ease;
+  }
+  .album-art-wrap {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    aspect-ratio: unset; border-radius: 0; box-shadow: none;
+  }
+  .album-meta {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(0deg, rgba(0,0,0,.82) 0%, transparent 100%);
+    padding: 28px 10px 10px; margin-top: 0;
+  }
+  .album-title { color: #fff; font-size: 12px; }
+  .album-artist { color: rgba(255,255,255,.65); font-size: 11px; }
+  .album:hover .album-art-wrap { transform: none; box-shadow: none; }
+  .play-count-badge { bottom: 8px; right: 8px; }
 }
 
 /* ── Tablet portrait: 5×5 ───────────────────────────────────────── */
@@ -1829,3 +1846,76 @@ main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
   pointer-events: none; line-height: 1.4;
   backdrop-filter: blur(4px);
 }
+
+/* ------------------------------------------------------------------ */
+/*  Compass / play-unheard spin animation                              */
+/* ------------------------------------------------------------------ */
+@keyframes compass-spin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(720deg); }
+}
+#play-unheard-topbar.spinning {
+  color: var(--accent);
+  border-color: var(--accent);
+  pointer-events: none;
+}
+#play-unheard-topbar.spinning svg {
+  animation: compass-spin 2s cubic-bezier(.4,0,.2,1) forwards;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Splash screen                                                      */
+/* ------------------------------------------------------------------ */
+.splash {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity .5s ease, transform .5s ease;
+  pointer-events: all;
+}
+.splash.splash-hiding {
+  opacity: 0; transform: scale(1.06);
+  pointer-events: none;
+}
+.splash-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 28px;
+}
+.splash-duck {
+  width: 100px; height: 90px;
+  color: var(--accent);
+  filter: drop-shadow(0 0 24px rgba(76,183,230,.35));
+}
+.splash-wordform {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.splash-brand-text {
+  font-size: 40px; font-weight: 900; letter-spacing: -.04em;
+  color: var(--text); line-height: 1;
+}
+.splash-wave {
+  width: 150px; height: 30px;
+  color: var(--accent); opacity: .8;
+}
+
+/* Waveform bar animation — ripple from centre out */
+@keyframes wave-pulse {
+  0%, 100% { transform: scaleY(.3); opacity: .45; }
+  50%       { transform: scaleY(1);  opacity: 1;   }
+}
+.splash-wave rect {
+  transform-origin: 50% 50%;
+  animation: wave-pulse .85s ease-in-out infinite;
+}
+.splash-wave rect:nth-child(1),
+.splash-wave rect:nth-child(13) { animation-delay: .36s; }
+.splash-wave rect:nth-child(2),
+.splash-wave rect:nth-child(12) { animation-delay: .30s; }
+.splash-wave rect:nth-child(3),
+.splash-wave rect:nth-child(11) { animation-delay: .24s; }
+.splash-wave rect:nth-child(4),
+.splash-wave rect:nth-child(10) { animation-delay: .18s; }
+.splash-wave rect:nth-child(5),
+.splash-wave rect:nth-child(9)  { animation-delay: .12s; }
+.splash-wave rect:nth-child(6),
+.splash-wave rect:nth-child(8)  { animation-delay: .06s; }
+.splash-wave rect:nth-child(7)  { animation-delay: 0s;   }

@@ -4,6 +4,33 @@
  * Copyright (c) 2026 Lewis Menzies (Music Duck / MusicD)
  * Released under the MIT License. See the LICENSE file for details.
  */
+
+/* ------------------------------------------------------------------ */
+/*  Splash screen — shown on every page load, fades when albums render */
+/* ------------------------------------------------------------------ */
+(function initSplash() {
+  const splash = document.getElementById("splash");
+  if (!splash) return;
+  const shownAt = Date.now();
+  const MIN_MS  = 1600; // minimum branding moment
+  let hidden = false;
+
+  function hideSplash() {
+    if (hidden) return;
+    hidden = true;
+    const wait = Math.max(0, MIN_MS - (Date.now() - shownAt));
+    setTimeout(() => {
+      splash.classList.add("splash-hiding");
+      splash.addEventListener("transitionend", () => {
+        if (splash.parentNode) splash.parentNode.removeChild(splash);
+      }, { once: true });
+    }, wait);
+  }
+
+  window.__hideSplash = hideSplash;
+  setTimeout(hideSplash, 7000); // safety: always clear after 7s
+})();
+
 (() => {
   // Disable pinch-zoom on iOS Safari (which ignores user-scalable=no since iOS 10)
   ["gesturestart", "gesturechange", "gestureend"].forEach((evt) => {
@@ -75,7 +102,7 @@
 
   // ----- Sizing -----
   // Returns a fixed album count that exactly fills the responsive grid:
-  //   Phone portrait  → 3×3 = 9
+  //   Phone portrait  → 2×3 = 6  (fills screen, art overlays meta)
   //   Tablet portrait → 5×5 = 25
   //   Tablet landscape → 7×3 = 21
   //   Desktop          → 9×4 = 36
@@ -86,7 +113,7 @@
     const minDim = Math.min(w, h);  // smallest dimension identifies phones vs tablets
 
     // Phone (narrowest side < 768 px)
-    if (minDim < 768) return 9;     // 3×3 — landscape is blocked via CSS overlay
+    if (minDim < 768) return 6;     // 2×3, fills screen — landscape is blocked via CSS overlay
 
     // Desktop (width ≥ 1200 px)
     if (w >= 1200) return 36;       // 9×4
@@ -197,6 +224,7 @@
   }
 
   function renderAlbums(albums) {
+    if (typeof window.__hideSplash === "function") window.__hideSplash();
     if (!albums.length) {
       grid.innerHTML = "";
       setBanner("No albums were returned. Is your library indexed?", true);
@@ -2347,19 +2375,21 @@
 })();
 
 /* ------------------------------------------------------------------ */
-/*  Play Unheard button in settings                                   */
+/*  Play Unheard — topbar compass button with 2-second spin           */
 /* ------------------------------------------------------------------ */
 (function initPlayUnheard() {
   const btn        = document.getElementById("play-unheard-topbar");
-  const overlay    = document.getElementById("settings-overlay");
   const zoneSelect = document.getElementById("zone-select");
   if (!btn) return;
   btn.addEventListener("click", async () => {
     const zone = zoneSelect && zoneSelect.value;
     if (!zone) { if (window.__showToast) window.__showToast("Select a zone first"); return; }
-    if (btn.disabled) return;
-    btn.disabled = true;
-    btn.textContent = "Finding…";
+    if (btn.classList.contains("spinning")) return;
+
+    // Spin the compass for 2 seconds, then fetch
+    btn.classList.add("spinning");
+    await new Promise(r => setTimeout(r, 2000));
+
     try {
       const r = await fetch("/api/play-unheard", {
         method: "POST",
@@ -2371,13 +2401,11 @@
         if (window.__showToast) window.__showToast(j.error || "Could not start playback", "error");
       } else {
         if (window.__showToast) window.__showToast("Playing: " + (j.album || "random album"));
-        if (overlay) overlay.classList.add("hidden");
       }
     } catch (e) {
       if (window.__showToast) window.__showToast("Request failed", "error");
     } finally {
-      btn.disabled = false;
-      btn.textContent = "Play unheard";
+      btn.classList.remove("spinning");
     }
   });
 })();
