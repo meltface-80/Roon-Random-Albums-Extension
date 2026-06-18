@@ -1432,10 +1432,10 @@
 
   async function fetchState() {
     const zid = selectedZoneId();
-    if (!zid) { bar.classList.add("hidden"); currentZone = null; return; }
+    if (!zid) return;  // zone not selected yet — leave bar as-is
     try {
       const r = await fetch("/api/zone-state?zone=" + encodeURIComponent(zid), { cache: "no-store" });
-      if (!r.ok) { bar.classList.add("hidden"); return; }
+      if (!r.ok) return;  // server/network error — keep current state
       const j = await r.json();
       renderZone(j.zone);
       saveTransportState(j.zone);

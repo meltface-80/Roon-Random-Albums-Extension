@@ -2,6 +2,16 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.17] — 2026-06-18
+
+### Fixed
+- **Transport bar persistence** — the mini bar was being hidden by two
+  defensive `bar.classList.add("hidden")` calls: one when the zone selector
+  was momentarily empty on page load (race with zone population), another on
+  any API error. Both now return early without touching bar visibility. The
+  bar is only hidden when Roon definitively reports nothing is playing for the
+  selected zone, so it stays visible through network hiccups and page loads.
+
 ## [1.5.16] — 2026-06-17
 
 ### Fixed
