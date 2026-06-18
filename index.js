@@ -1947,7 +1947,7 @@ app.get("/api/filters/tags", async (req, res) => {
   }
 });
 
-// Record labels — built from Qobuz-scraped data (no Roon "Labels" node needed).
+// Record labels — built via iTunes + MusicBrainz scan (no Roon "Labels" node needed).
 // Triggers a background scan on first call so the list grows over time.
 app.get("/api/filters/labels", (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
@@ -1968,10 +1968,13 @@ app.get("/api/filters/labels", (req, res) => {
     });
   }
   labels.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
+  // If the album index is still loading (e.g. first startup), report scanning=true
+  // so the client keeps polling rather than showing a permanent "no labels" message.
+  const albumsBuilding = albumIndex.count === 0 && !!albumIndex.building;
   res.json({
     labels,
-    scanning:  labelsIndex.building,
-    progress:  labelsIndex.progress,
+    scanning:  labelsIndex.building || albumsBuilding,
+    progress:  albumsBuilding ? albumIndex.progress : labelsIndex.progress,
     count:     labelsIndex.count
   });
 });
@@ -2001,7 +2004,7 @@ app.get("/api/label-albums", (req, res) => {
   res.json({ albums, total: albums.length, label: name, order });
 });
 
-// Labels scan status — lets the UI poll while the background Qobuz scan runs.
+// Labels scan status — lets the UI poll while the background scan runs.
 app.get("/api/labels-scan-status", (req, res) => {
   res.json({
     scanning:  labelsIndex.building,
@@ -2009,6 +2012,18 @@ app.get("/api/labels-scan-status", (req, res) => {
     count:     labelsIndex.count,
     builtAt:   labelsIndex.builtAt
   });
+});
+
+// Force a fresh labels scan — resets builtAt so the next /api/filters/labels
+// call triggers a full re-scan (useful if the initial scan found 0 labels).
+app.post("/api/labels/rescan", (req, res) => {
+  if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
+  if (labelsIndex.building) return res.json({ ok: false, reason: "scan already running" });
+  labelsIndex.builtAt = 0;
+  runLabelsIndexScan().catch(e => {
+    if (DEBUG) console.error("[labels] rescan error:", e.message);
+  });
+  res.json({ ok: true });
 });
 
 // Debug: dump the browse root + Library contents so we can see whether (and

@@ -1210,11 +1210,29 @@
         if (!labels.length) {
           grid.innerHTML = "";
           if (j.scanning) {
-            setBanner("Scanning your library for record labels… " + pct + "% complete. Check back in a moment.", false);
+            const msg = pct > 0
+              ? "Scanning your library for record labels… " + pct + "% complete."
+              : "Building library index… labels will appear once the scan starts.";
+            setBanner(msg, false);
             // Re-poll every 4 s while the scan is running
             setTimeout(() => { if (mode === "list") showLabelsList(); }, 4000);
           } else {
-            setBanner("No record labels found in your library yet. Open some album cards to populate the list.", false);
+            setBanner("No labels found yet — the background scan looks up labels via iTunes and MusicBrainz. This can take a few minutes for large libraries.", false);
+            // Show a rescan button so the user can retry without restarting the server.
+            const rescanBtn = document.createElement("button");
+            rescanBtn.className = "primary-btn";
+            rescanBtn.style.cssText = "margin:16px auto;display:block;";
+            rescanBtn.textContent = "Rescan now";
+            rescanBtn.addEventListener("click", async () => {
+              rescanBtn.disabled = true;
+              rescanBtn.textContent = "Starting…";
+              try {
+                await fetch("/api/labels/rescan", { method: "POST",
+                  headers: { "Content-Type": "application/json" }, body: "{}" });
+                setTimeout(() => { if (mode === "list") showLabelsList(); }, 1000);
+              } catch (e) { rescanBtn.disabled = false; rescanBtn.textContent = "Rescan now"; }
+            });
+            grid.appendChild(rescanBtn);
           }
           return;
         }

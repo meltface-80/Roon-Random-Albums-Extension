@@ -2,6 +2,21 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.1] — 2026-06-18
+
+### Fixed
+- **Label browser not populating** — when the labels screen was opened before
+  the album index finished building (common on first startup), the server
+  returned `scanning: false` immediately, causing the UI to show "No labels
+  found" permanently instead of waiting. The API now reports `scanning: true`
+  while the album index is still loading, so the client re-polls correctly.
+- **Misleading "open album cards" message** — the "no labels found" banner now
+  accurately explains that labels come from an automatic iTunes + MusicBrainz
+  scan, not from opening album modals.
+- **Rescan button** — a "Rescan now" button appears on the labels screen when
+  the scan has completed but found zero labels, so users can retry without
+  restarting the server. Also exposed as `POST /api/labels/rescan`.
+
 ## [1.6.0] — 2026-06-18
 
 ### Fixed
