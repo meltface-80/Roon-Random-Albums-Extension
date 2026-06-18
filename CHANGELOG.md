@@ -2,6 +2,17 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.23] — 2026-06-18
+
+### Fixed
+- **Random album radio auto-start on restart** — when the extension reconnected
+  to Roon, the initial zone-state snapshot was treated the same as a live zone
+  change. Any zone with radio enabled that was stopped/idle would immediately
+  start playing. The `"Subscribed"` event (startup snapshot) now passes
+  `isInitial=true` to `handleRadioZone`, which suppresses the `"play"` decision
+  so a stopped zone is left alone on reconnect. Queue top-up for zones that are
+  already playing is unaffected — seamless continuation still works.
+
 ## [1.5.22] — 2026-06-18
 
 ### Fixed

@@ -67,7 +67,7 @@ const roon = new RoonApi({
         (data.zones || []).forEach(z => {
           zones[z.zone_id] = z;
           (z.outputs || []).forEach(o => { outputs[o.output_id] = o; });
-          handleRadioZone(z);
+          handleRadioZone(z, true); // isInitial=true: don't auto-start stopped zones on reconnect
           scrobbleUpdate(z);
         });
       } else if (cmd === "Changed") {
@@ -2200,7 +2200,7 @@ async function radioTopUp(zoneId, mode) {
   }
 }
 
-function handleRadioZone(z) {
+function handleRadioZone(z, isInitial) {
   if (!z || !radioZones.has(z.zone_id)) return;
   const st = radioBusy[z.zone_id] || (radioBusy[z.zone_id] = { active: false, ts: 0 });
 
@@ -2213,7 +2213,9 @@ function handleRadioZone(z) {
 
   const decision = radioDecision(z, true);
   if (decision === "queue") radioTopUp(z.zone_id, "queue");
-  else if (decision === "play") radioTopUp(z.zone_id, "play");
+  // Never auto-start a stopped zone on the initial snapshot after pairing/restart —
+  // only begin playback in response to real zone-change events.
+  else if (decision === "play" && !isInitial) radioTopUp(z.zone_id, "play");
 }
 
 // ---------------------------------------------------------------------------
