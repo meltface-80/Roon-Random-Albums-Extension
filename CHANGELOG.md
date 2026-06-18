@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.32] — 2026-06-18
+
+### Fixed
+- **Phone portrait grid** — restored 3×3 (9 albums) layout. The CSS override that forced 2 columns has been removed; the base 3-column grid now applies correctly to all phone portrait views.
+
 ## [1.5.31] — 2026-06-18
 
 ### Fixed

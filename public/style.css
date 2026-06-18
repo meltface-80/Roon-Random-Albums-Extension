@@ -293,12 +293,7 @@ main {
   gap: 14px 10px;
 }
 
-/* Phone portrait: 2-column scrollable grid */
-@media (max-width: 767px) and (orientation: portrait) {
-  .album-grid { grid-template-columns: 1fr 1fr; }
-}
-
-/* ── Tablet portrait: 5×5 ───────────────────────────────────────── */
+/* ── Tablet portrait: 5×4 ───────────────────────────────────────── */
 @media (min-width: 768px) and (orientation: portrait) {
   .album-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 20px 14px; }
 }
@@ -308,7 +303,7 @@ main {
   .album-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 16px 12px; }
 }
 
-/* ── Desktop: 9×4 ───────────────────────────────────────────────── */
+/* ── Desktop: 9×5 ───────────────────────────────────────────────── */
 @media (min-width: 1200px) {
   .album-grid { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 18px 12px; }
 }

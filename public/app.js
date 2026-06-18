@@ -76,7 +76,7 @@
 
   // ----- Sizing -----
   // Returns a fixed album count that exactly fills the responsive grid:
-  //   Phone portrait   → 2×3  = 6   (fills screen, art overlays meta)
+  //   Phone portrait   → 3×3  = 9   (landscape is blocked via CSS overlay)
   //   Tablet portrait  → 5×4  = 20
   //   Tablet landscape → 7×3  = 21
   //   Desktop          → 9×5  = 45
@@ -87,7 +87,7 @@
     const minDim = Math.min(w, h);  // smallest dimension identifies phones vs tablets
 
     // Phone (narrowest side < 768 px)
-    if (minDim < 768) return 6;     // 2×3, fills screen — landscape is blocked via CSS overlay
+    if (minDim < 768) return 9;     // 3×3, landscape is blocked via CSS overlay
 
     // Desktop (width ≥ 1200 px)
     if (w >= 1200) return 45;       // 9×5
