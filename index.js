@@ -64,22 +64,24 @@ const roon = new RoonApi({
     c.services.RoonApiTransport.subscribe_zones((cmd, data) => {
       if (cmd === "Subscribed") {
         zones = {}; outputs = {};
-        lastSubscribedAt = Date.now();
+        // Reset transition tracking — treat every zone as newly seen.
+        Object.keys(zonePrevState).forEach(k => delete zonePrevState[k]);
         (data.zones || []).forEach(z => {
           zones[z.zone_id] = z;
           (z.outputs || []).forEach(o => { outputs[o.output_id] = o; });
-          handleRadioZone(z, true); // isInitial=true: don't auto-start stopped zones on reconnect
+          handleRadioZone(z, true); // isInitial=true: never auto-start on reconnect snapshot
           scrobbleUpdate(z);
         });
       } else if (cmd === "Changed") {
         (data.zones_added   || []).forEach(z => { zones[z.zone_id] = z;
-          (z.outputs || []).forEach(o => { outputs[o.output_id] = o; }); handleRadioZone(z); scrobbleUpdate(z); });
+          (z.outputs || []).forEach(o => { outputs[o.output_id] = o; }); handleRadioZone(z, true); scrobbleUpdate(z); });
         (data.zones_changed || []).forEach(z => { zones[z.zone_id] = z;
           (z.outputs || []).forEach(o => { outputs[o.output_id] = o; }); handleRadioZone(z); scrobbleUpdate(z); });
         (data.zones_removed || []).forEach(zid => {
           const z = zones[zid];
           if (z) (z.outputs || []).forEach(o => delete outputs[o.output_id]);
           delete zones[zid];
+          delete zonePrevState[zid]; // zone offline — reset so it won't auto-start if it returns
         });
       }
     });
@@ -88,6 +90,7 @@ const roon = new RoonApi({
   },
   core_unpaired: function () {
     core = null; zones = {}; outputs = {};
+    Object.keys(zonePrevState).forEach(k => delete zonePrevState[k]);
     stopIndexMaintenance();
     albumIndex.albums = []; albumIndex.count = 0;
     albumIndex.builtAt = 0; albumIndex.progress = 0;
@@ -2212,10 +2215,11 @@ function persistRadio() {
   savePersistedSettings({ radioZones: zones });
 }
 const radioBusy = {}; // zone_id -> { active: bool, ts: number }
-// After a Roon reconnect, zones_changed events arrive without isInitial and
-// would auto-start stopped zones. Suppress "play" decisions for this window.
-let lastSubscribedAt = 0;
-const RECONNECT_GRACE_MS = 15000;
+// Per-zone previous state — used to detect genuine playing→stopped transitions.
+// "play" is only triggered when we observed a zone go from playing/loading
+// to stopped (queue ran out naturally). A zone that is already stopped when
+// we first see it (restart / reconnect) never gets a "play" command.
+const zonePrevState = {};
 
 async function radioTopUp(zoneId, mode) {
   const st = radioBusy[zoneId] || (radioBusy[zoneId] = { active: false, ts: 0 });
@@ -2234,23 +2238,30 @@ async function radioTopUp(zoneId, mode) {
   }
 }
 
-function handleRadioZone(z, isInitial) {
+function handleRadioZone(z, isInitial, allowPlay) {
   if (!z || !radioZones.has(z.zone_id)) return;
-  const st = radioBusy[z.zone_id] || (radioBusy[z.zone_id] = { active: false, ts: 0 });
+  const zid = z.zone_id;
+  const st  = radioBusy[zid] || (radioBusy[zid] = { active: false, ts: 0 });
 
-  // Clear the "working" guard once the queue is healthy again (our added album
-  // landed), so we'll top up afresh when it next reaches the last track.
+  // Clear the "working" guard once the queue is healthy again.
   if ((z.state === "playing" || z.state === "loading") &&
       typeof z.queue_items_remaining === "number" && z.queue_items_remaining > 1) {
     st.active = false;
   }
 
   const decision = radioDecision(z, true);
-  if (decision === "queue") radioTopUp(z.zone_id, "queue");
-  // Never auto-start a stopped zone on the initial snapshot after pairing/restart —
-  // only begin playback in response to real zone-change events.
-  else if (decision === "play" && !isInitial &&
-           (Date.now() - lastSubscribedAt) > RECONNECT_GRACE_MS) radioTopUp(z.zone_id, "play");
+  if (decision === "queue") {
+    radioTopUp(zid, "queue");
+  } else if (decision === "play" && !isInitial) {
+    // Only start playback when we witnessed this zone transition from
+    // playing/loading → stopped (queue ran out naturally), OR when the caller
+    // explicitly requested it (user just enabled radio on an idle zone).
+    const wasPlaying = zonePrevState[zid] === "playing" || zonePrevState[zid] === "loading";
+    if (wasPlaying || allowPlay) radioTopUp(zid, "play");
+  }
+
+  // Record state AFTER the decision so the next event sees a real transition.
+  zonePrevState[zid] = z.state;
 }
 
 // ---------------------------------------------------------------------------
@@ -2327,8 +2338,9 @@ app.post("/api/radio", (req, res) => {
   persistRadio();
   res.json({ ok: true, enabled });
   // React immediately: start if idle, or top up if already on the last track.
+  // allowPlay=true because the user explicitly just enabled radio.
   if (enabled && core && zones[zoneId]) {
-    try { handleRadioZone(zones[zoneId]); } catch (e) {}
+    try { handleRadioZone(zones[zoneId], false, true); } catch (e) {}
   }
 });
 

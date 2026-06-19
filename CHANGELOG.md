@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.33] — 2026-06-19
+
+### Fixed
+- **Random Album Radio auto-starts on restart** — eliminated the bug where radio would begin playing automatically whenever Roon or the extension restarted. Root cause: any `zones_changed` event for a zone in "stopped" state (with empty queue) after the 15-second grace window would trigger playback. Replaced the unreliable grace timer with proper state-transition detection: a "play" command is now only issued when the extension observes an actual `playing → stopped` transition for a zone (i.e. the queue genuinely ran out). A zone that is already stopped when first seen after a reconnect will never auto-start. Enabling radio explicitly via the UI still starts playback immediately as expected.
+
 ## [1.5.32] — 2026-06-18
 
 ### Fixed
