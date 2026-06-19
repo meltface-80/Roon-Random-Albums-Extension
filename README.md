@@ -4,19 +4,28 @@
 
 </div>
 
-# Note: If you are on a newer version than the latest below, I recommend you stop, rm and delete the `roon-random-albums` directory. Claude Code had a bad day and broke several new features and then broke old features in the process of trying to fix everything else. 
-
----
-
 # Random Albums — a Roon extension
 
-A web UI that shows a screenful of random albums from your Roon library, with
-playback actions targeting any of your zones. Includes instant whole-library
-search, listening statistics, smart radio, and more.
+> **Note:** If you are running a version newer than v1.5.34, please roll back. A bad release sequence broke several features. Stop and remove your container, then reinstall from the v1.5.34 tarball using the instructions below.
 
-> The Roon API does not let third-party code navigate the Roon app itself, so
-> the album detail view (art, tracks, action buttons) is rendered inside this
-> UI. Tapping **Play Now** still plays through Roon on the zone you select.
+A web UI that shows a screenful of random albums from your Roon library, with instant whole-library search, playback actions targeting any zone, and more.
+
+> The Roon API does not let third-party code navigate the Roon app itself, so the album detail view (art, tracks, action buttons) is rendered inside this UI. Tapping **Play Now** still plays through Roon on the zone you select.
+
+## Features
+
+- **Random album grid** — fills your screen with random picks from your full library, refreshed on demand
+- **Instant search** — whole-library search with results as you type
+- **Album detail** — full track listing, play/queue actions, release year, editorial review, and artist bio
+- **Now Playing** — live panel showing the current track with album art and transport controls
+- **Play unheard** — one tap to find and play an album not in your listening history
+- **Random Album Radio** — automatically queues a new random album when your queue runs dry, keeping music going without repeating recent plays
+- **Listening statistics** — play history, most-played albums, and recently played
+- **Record labels** — browse your library by label, with Fan Art TV logos where available
+- **Filters** — narrow the random pool by genre, decade, tag, or label
+- **Artist view** — tap any artist name to see all their albums in your library
+- **Share card** — generates a 1200×600 PNG of the current album, ready to share
+- **In-app updater** — checks for new releases automatically; install with one tap from Settings, no terminal needed
 
 ---
 
@@ -27,7 +36,6 @@ Each release ships a `*-docker.tar.gz`. Download it, build the image, and run:
 ```bash
 wget https://github.com/meltface-80/Roon-Random-Albums-Extension/raw/main/roon-random-albums-v1.5.34-docker.tar.gz
 tar -xzf roon-random-albums-v1.5.34-docker.tar.gz
-cd roon-random-albums
 docker build -t roon-random-albums:1.5.34 .
 docker run -d \
   --name roon-random-albums \
@@ -65,7 +73,6 @@ migration banner automatically with copy-ready commands. Or follow these steps:
 # 1. Download and build the Docker image
 wget https://github.com/meltface-80/Roon-Random-Albums-Extension/raw/main/roon-random-albums-v1.5.34-docker.tar.gz
 tar -xzf roon-random-albums-v1.5.34-docker.tar.gz
-cd roon-random-albums
 docker build -t roon-random-albums:1.5.34 .
 
 # 2. Run the Docker container
@@ -99,7 +106,6 @@ To upgrade manually:
 docker stop roon-random-albums && docker rm roon-random-albums
 wget https://github.com/meltface-80/Roon-Random-Albums-Extension/raw/main/roon-random-albums-v{NEW_VERSION}-docker.tar.gz
 tar -xzf roon-random-albums-v{NEW_VERSION}-docker.tar.gz
-cd roon-random-albums
 docker build -t roon-random-albums:{NEW_VERSION} .
 docker run -d --name roon-random-albums --restart unless-stopped --network host -v roon-random-albums-data:/app/data roon-random-albums:{NEW_VERSION}
 ```
