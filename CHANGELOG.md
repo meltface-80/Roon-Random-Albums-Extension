@@ -2,6 +2,13 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.42] — 2026-06-19
+
+### Fixed
+- **Progress bar frozen during passes 2–4** — `done` was only incrementing inside the iTunes pass. TheAudioDB, MusicBrainz, and Discogs passes now update progress correctly so the UI percentage moves throughout the full scan.
+- **No visibility into long-running passes** — the log only wrote at pass boundaries, making it impossible to tell if TheAudioDB (potentially 37+ minutes) was stuck or just slow. Now logs every 100 albums processed within each pass.
+- **TheAudioDB could block for hours on timeout storms** — added a circuit breaker: 10 consecutive request errors in any pass abort that pass immediately and log the reason. The next 12-hour auto-rescan retries. Reduced TheAudioDB timeout from 10s to 6s so stalled requests fail faster.
+
 ## [1.5.41] — 2026-06-19
 
 ### Added

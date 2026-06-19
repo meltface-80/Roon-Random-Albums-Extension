@@ -1072,7 +1072,7 @@ async function fetchLabelFromTheAudioDB(title, artist) {
   await tadbWait();
   const url = `https://www.theaudiodb.com/api/v1/json/2/searchalbum.php?s=${encodeURIComponent(artist)}&a=${encodeURIComponent(title)}`;
   try {
-    const json = await httpJson(url, { "User-Agent": MB_USER_AGENT }, 10000);
+    const json = await httpJson(url, { "User-Agent": MB_USER_AGENT }, 6000);
     const albums = json && json.album;
     if (!Array.isArray(albums) || !albums.length) return null;
     const normTitle = normalize(title);
@@ -1286,6 +1286,7 @@ async function runLabelsIndexScan() {
   }
 
   // Pass 2: TheAudioDB — serial (1 req/sec rate limit on the free API).
+  // Circuit breaker: 10 consecutive errors → abort pass, wait for next scan window.
   if (needsAudioDB.length) {
     const tadbStartMsg = "[labels] pass 2 (TheAudioDB): " + needsAudioDB.length + " albums";
     if (DEBUG) console.log(tadbStartMsg);
@@ -1293,26 +1294,48 @@ async function runLabelsIndexScan() {
   }
   const needsMB = [];
   let tadbErrors = 0;
-  for (const al of needsAudioDB) {
+  let tadbConsec = 0;
+  let tadbAborted = false;
+  for (let ti = 0; ti < needsAudioDB.length; ti++) {
+    if (tadbAborted) {
+      needsMB.push(...needsAudioDB.slice(ti));
+      done += needsAudioDB.length - ti;
+      labelsIndex.progress = (alreadyDone + done) / total;
+      break;
+    }
+    const al = needsAudioDB[ti];
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     try {
       const label = await fetchLabelFromTheAudioDB(al.title, al.subtitle);
-      if (label) { await saveLabelEntry(key, label, null, al); }
-      else { needsMB.push(al); }
+      if (label) { await saveLabelEntry(key, label, null, al); tadbConsec = 0; }
+      else { needsMB.push(al); tadbConsec = 0; }
     } catch (e) {
       tadbErrors++;
-      appendLabelsLog("[labels:theaudiodb] error for \"" + al.title + "\": " + e.message);
+      tadbConsec++;
       needsMB.push(al);
+      if (tadbConsec >= 10) {
+        tadbAborted = true;
+        const msg = "[labels] pass 2 (TheAudioDB): " + tadbConsec + " consecutive errors — aborting, will retry next scan window";
+        console.log(msg);
+        appendLabelsLog(msg);
+      }
+    }
+    done++;
+    labelsIndex.progress = (alreadyDone + done) / total;
+    if ((ti + 1) % 100 === 0) {
+      appendLabelsLog("[labels] pass 2 (TheAudioDB): " + (ti + 1) + "/" + needsAudioDB.length + " done so far");
     }
   }
   if (needsAudioDB.length) {
-    const tadbMsg = "[labels] pass 2 (TheAudioDB): done, " + needsMB.length + " forwarded to MB" +
-      (tadbErrors ? ", " + tadbErrors + " errors" : "");
+    const tadbMsg = "[labels] pass 2 (TheAudioDB): complete, " + needsMB.length + " forwarded to MB" +
+      (tadbAborted ? " (aborted — consecutive errors)" : "") +
+      (tadbErrors ? ", " + tadbErrors + " errors total" : "");
     if (DEBUG) console.log(tadbMsg);
     appendLabelsLog(tadbMsg);
   }
 
   // Pass 3: MusicBrainz for remaining misses — serial to respect rate limit.
+  // Circuit breaker: 10 consecutive errors → abort pass.
   if (needsMB.length) {
     const mbStartMsg = "[labels] pass 3 (MusicBrainz): " + needsMB.length + " albums";
     if (DEBUG) console.log(mbStartMsg);
@@ -1320,45 +1343,88 @@ async function runLabelsIndexScan() {
   }
   const needsDiscogs = [];
   let mbErrors = 0;
-  for (const al of needsMB) {
+  let mbConsec = 0;
+  let mbAborted = false;
+  for (let mi = 0; mi < needsMB.length; mi++) {
+    if (mbAborted) {
+      needsDiscogs.push(...needsMB.slice(mi));
+      done += needsMB.length - mi;
+      labelsIndex.progress = (alreadyDone + done) / total;
+      break;
+    }
+    const al = needsMB[mi];
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     try {
       const mbResult = await fetchLabelFromMusicBrainz(al.title, al.subtitle);
-      if (mbResult) { await saveLabelEntry(key, mbResult.label, mbResult.mbid, al); }
-      else { needsDiscogs.push(al); }
+      if (mbResult) { await saveLabelEntry(key, mbResult.label, mbResult.mbid, al); mbConsec = 0; }
+      else { needsDiscogs.push(al); mbConsec = 0; }
     } catch (e) {
       mbErrors++;
-      appendLabelsLog("[labels:mb] error for \"" + al.title + "\": " + e.message);
+      mbConsec++;
       needsDiscogs.push(al);
+      if (mbConsec >= 10) {
+        mbAborted = true;
+        const msg = "[labels] pass 3 (MusicBrainz): " + mbConsec + " consecutive errors — aborting, will retry next scan window";
+        console.log(msg);
+        appendLabelsLog(msg);
+      }
+    }
+    done++;
+    labelsIndex.progress = (alreadyDone + done) / total;
+    if ((mi + 1) % 100 === 0) {
+      appendLabelsLog("[labels] pass 3 (MusicBrainz): " + (mi + 1) + "/" + needsMB.length + " done so far");
     }
   }
   if (needsMB.length) {
-    const mbMsg = "[labels] pass 3 (MusicBrainz): done, " + needsDiscogs.length + " forwarded to Discogs" +
-      (mbErrors ? ", " + mbErrors + " errors" : "");
+    const mbMsg = "[labels] pass 3 (MusicBrainz): complete, " + needsDiscogs.length + " forwarded to Discogs" +
+      (mbAborted ? " (aborted — consecutive errors)" : "") +
+      (mbErrors ? ", " + mbErrors + " errors total" : "");
     if (DEBUG) console.log(mbMsg);
     appendLabelsLog(mbMsg);
   }
 
   // Pass 4: Discogs — serial, rate-limited, last resort.
+  // Circuit breaker: 10 consecutive errors → abort pass.
   if (needsDiscogs.length) {
     const discogsStartMsg = "[labels] pass 4 (Discogs): " + needsDiscogs.length + " albums";
     if (DEBUG) console.log(discogsStartMsg);
     appendLabelsLog(discogsStartMsg);
   }
   let discogsErrors = 0;
-  for (const al of needsDiscogs) {
+  let discogsConsec = 0;
+  let discogsAborted = false;
+  for (let di = 0; di < needsDiscogs.length; di++) {
+    if (discogsAborted) {
+      done += needsDiscogs.length - di;
+      labelsIndex.progress = (alreadyDone + done) / total;
+      break;
+    }
+    const al = needsDiscogs[di];
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     try {
       const label = await fetchLabelFromDiscogs(al.title, al.subtitle);
-      if (label) { await saveLabelEntry(key, label, null, al); }
+      if (label) { await saveLabelEntry(key, label, null, al); discogsConsec = 0; }
+      else { discogsConsec = 0; }
     } catch (e) {
       discogsErrors++;
-      appendLabelsLog("[labels:discogs] error for \"" + al.title + "\": " + e.message);
+      discogsConsec++;
+      if (discogsConsec >= 10) {
+        discogsAborted = true;
+        const msg = "[labels] pass 4 (Discogs): " + discogsConsec + " consecutive errors — aborting, will retry next scan window";
+        console.log(msg);
+        appendLabelsLog(msg);
+      }
+    }
+    done++;
+    labelsIndex.progress = (alreadyDone + done) / total;
+    if ((di + 1) % 100 === 0) {
+      appendLabelsLog("[labels] pass 4 (Discogs): " + (di + 1) + "/" + needsDiscogs.length + " done so far");
     }
   }
   if (needsDiscogs.length) {
-    const discogsMsg = "[labels] pass 4 (Discogs): done" +
-      (discogsErrors ? ", " + discogsErrors + " errors" : "");
+    const discogsMsg = "[labels] pass 4 (Discogs): complete" +
+      (discogsAborted ? " (aborted — consecutive errors)" : "") +
+      (discogsErrors ? ", " + discogsErrors + " errors total" : "");
     if (DEBUG) console.log(discogsMsg);
     appendLabelsLog(discogsMsg);
   }
