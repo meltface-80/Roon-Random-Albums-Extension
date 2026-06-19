@@ -135,17 +135,6 @@ To force an immediate check:
 docker restart roon-random-albums
 ```
 
-To upgrade manually:
-
-```bash
-docker stop roon-random-albums && docker rm roon-random-albums
-cd /opt/roon-random-albums
-wget https://github.com/meltface-80/Roon-Random-Albums-Extension/raw/main/roon-random-albums-v{NEW_VERSION}-docker.tar.gz
-tar -xzf roon-random-albums-v{NEW_VERSION}-docker.tar.gz
-docker build -t roon-random-albums:{NEW_VERSION} .
-docker run -d --name roon-random-albums --restart unless-stopped --network host -v roon-random-albums-data:/app/data roon-random-albums:{NEW_VERSION}
-```
-
 ## Configuration
 
 | Env var     | Default | What it does |
