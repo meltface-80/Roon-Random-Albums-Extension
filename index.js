@@ -1065,32 +1065,41 @@ async function buildFileLabelMap() {
   const parseFile = mm.parseFile || (mm.default && mm.default.parseFile);
   if (!parseFile) return map;
 
-  try {
-    const artistDirs = fs.readdirSync(MUSIC_DIR, { withFileTypes: true })
-      .filter(d => d.isDirectory()).map(d => d.name);
-    for (const artistDir of artistDirs) {
-      const artistPath = path.join(MUSIC_DIR, artistDir);
-      let albumDirs;
-      try { albumDirs = fs.readdirSync(artistPath, { withFileTypes: true }).filter(d => d.isDirectory()); }
-      catch (e) { continue; }
-      for (const albumDirEnt of albumDirs) {
-        const albumPath = path.join(artistPath, albumDirEnt.name);
-        let files;
-        try { files = fs.readdirSync(albumPath).filter(f => /\.(flac|mp3|m4a|aac|ogg|opus|wv|ape|wav|aiff?)$/i.test(f)); }
-        catch (e) { continue; }
-        if (!files.length) continue;
-        const filePath = path.join(albumPath, files[0]);
-        try {
-          const meta = await parseFile(filePath, { duration: false, skipCovers: true });
-          const label = (meta.common.label && meta.common.label[0])
-            || meta.common.organization || null;
-          if (label && !isLikelyNotALabel(label)) {
-            const key = normalize(albumDirEnt.name) + "||" + normalize(artistDir);
-            map.set(key, label);
-          }
-        } catch (e) { /* unreadable file — skip */ }
-      }
+  const AUDIO_RE = /\.(flac|mp3|m4a|aac|ogg|opus|wv|ape|wav|aiff?)$/i;
+
+  // Recursively scan directories up to MAX_DEPTH levels deep.
+  // When audio files are found in a directory, read tags from the first one.
+  // Match is keyed on tag values (common.album + common.albumartist) so
+  // directory naming convention (Artist/Album vs flat Artist - Album) doesn't matter.
+  const MAX_DEPTH = 3;
+  async function scanDir(dirPath, depth) {
+    if (depth > MAX_DEPTH) return;
+    let entries;
+    try { entries = fs.readdirSync(dirPath, { withFileTypes: true }); } catch (e) { return; }
+
+    const audioFile = entries.find(e => e.isFile() && AUDIO_RE.test(e.name));
+    if (audioFile) {
+      try {
+        const meta = await parseFile(path.join(dirPath, audioFile.name), { duration: false, skipCovers: true });
+        const label = (meta.common.label && meta.common.label[0]) || meta.common.organization || null;
+        const album = meta.common.album;
+        const albumartist = meta.common.albumartist
+          || (meta.common.artists && meta.common.artists[0])
+          || meta.common.artist || null;
+        if (label && !isLikelyNotALabel(label) && album) {
+          const key = normalize(album) + "||" + normalize(albumartist || "");
+          if (!map.has(key)) map.set(key, label);
+        }
+      } catch (e) { /* unreadable — skip */ }
     }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) await scanDir(path.join(dirPath, entry.name), depth + 1);
+    }
+  }
+
+  try {
+    await scanDir(MUSIC_DIR, 0);
   } catch (e) {
     if (DEBUG) console.error("[labels:files] scan error:", e.message);
   }

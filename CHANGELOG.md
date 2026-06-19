@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.38] — 2026-06-19
+
+### Fixed
+- **File metadata scanner: wrong directory structure assumed** — the previous scanner expected strict `Artist/Album/tracks` nesting. Real libraries use mixed layouts (flat `Artist - Album/`, year-prefixed folders at root, proper nested `Artist/Album/` alongside each other). The scanner now recursively walks the music directory and matches on audio file tags (`common.album` + `common.albumartist`) rather than directory names, so naming convention is irrelevant.
+
 ## [1.5.37] — 2026-06-19
 
 ### Added
