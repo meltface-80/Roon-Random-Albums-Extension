@@ -1144,6 +1144,32 @@
     }
     window.__exitLabels = exitLabels;
 
+    function makeScanLogLink() {
+      const wrap = document.createElement("div");
+      wrap.className = "scan-log-link";
+      wrap.style.cssText = "text-align:center;margin:8px 0 4px;font-size:0.8em;opacity:0.7;";
+      const a = document.createElement("a");
+      a.href = "/api/labels-scan-log";
+      a.download = "labels-scan.log";
+      a.textContent = "Download scan log";
+      a.style.cssText = "color:inherit;text-decoration:underline;cursor:pointer;margin-right:12px;";
+      const copyBtn = document.createElement("button");
+      copyBtn.textContent = "Copy log";
+      copyBtn.style.cssText = "background:none;border:none;color:inherit;text-decoration:underline;cursor:pointer;font-size:inherit;padding:0;";
+      copyBtn.addEventListener("click", async () => {
+        try {
+          const r = await fetch("/api/labels-scan-log");
+          const text = await r.text();
+          await navigator.clipboard.writeText(text);
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => { copyBtn.textContent = "Copy log"; }, 2000);
+        } catch (e) { copyBtn.textContent = "Failed"; setTimeout(() => { copyBtn.textContent = "Copy log"; }, 2000); }
+      });
+      wrap.appendChild(a);
+      wrap.appendChild(copyBtn);
+      return wrap;
+    }
+
     async function showLabelsList(isRepoll = false) {
       mode = "list";
       labelsActive = true;
@@ -1186,12 +1212,17 @@
               } catch (e) { rescanBtn.disabled = false; rescanBtn.textContent = "Rescan now"; }
             });
             grid.appendChild(rescanBtn);
+            grid.appendChild(makeScanLogLink());
           }
           return;
         }
         const scanNote = j.scanning ? " (scanning… " + pct + "%)" : "";
         setCountText(labels.length.toLocaleString() + " labels" + scanNote);
         renderLabelTiles(labels);
+        // Show scan log link after labels render (remove any old one first)
+        const oldLink = grid.querySelector(".scan-log-link");
+        if (oldLink) oldLink.remove();
+        if (!j.scanning) grid.appendChild(makeScanLogLink());
         // Keep refreshing while the scan adds more labels
         if (j.scanning) {
           setTimeout(() => { if (mode === "list") showLabelsList(true); }, 5000);

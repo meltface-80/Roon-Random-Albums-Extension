@@ -2,6 +2,17 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.41] — 2026-06-19
+
+### Added
+- **Scan error logging** — all scan events (start, per-pass summaries, errors, completion) are now written to `data/labels-scan.log` with timestamps. The log rotates automatically at ~100KB.
+- **Scan log download** — a "Download scan log" and "Copy log" link appears in the Labels view after a scan, for easy sharing when debugging.
+- **12-hour auto-rescan** — the labels scan now re-runs automatically every 12 hours while paired with a Roon Core, so new albums are picked up without a manual rescan.
+- **`GET /api/labels-scan-log`** — serves the scan log as a plain-text download.
+
+### Changed
+- **Rate-limit errors now abort silently** — when iTunes returns 429/403, the error is recorded in the log and the pass aborts; the next scheduled 12-hour window will retry rather than erroring again in the same run.
+
 ## [1.5.40] — 2026-06-19
 
 ### Fixed

@@ -633,6 +633,24 @@ try { Database = require("better-sqlite3"); } catch (e) { Database = null; }
 const LABELS_DB_DIR  = path.join(__dirname, "data", "cache");
 const LABELS_DB_FILE = path.join(LABELS_DB_DIR, "labels.db");
 const SETTINGS_FILE  = path.join(LABELS_DB_DIR, "settings.json");
+const LABELS_LOG_FILE = path.join(__dirname, "data", "labels-scan.log");
+const LABELS_LOG_MAX = 100 * 1024; // rotate at ~100KB
+
+function appendLabelsLog(message) {
+  try {
+    fs.mkdirSync(path.join(__dirname, "data"), { recursive: true });
+    const line = new Date().toISOString() + " " + message + "\n";
+    // Rotate if oversized
+    try {
+      const stat = fs.statSync(LABELS_LOG_FILE);
+      if (stat.size >= LABELS_LOG_MAX) {
+        fs.writeFileSync(LABELS_LOG_FILE, line);
+        return;
+      }
+    } catch (e) { /* file doesn't exist yet */ }
+    fs.appendFileSync(LABELS_LOG_FILE, line);
+  } catch (e) { /* never throw from log helper */ }
+}
 
 function loadPersistedSettings() {
   try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8")) || {}; } catch (e) { return {}; }
@@ -1139,11 +1157,13 @@ async function buildFileLabelMap() {
 // ---------------------------------------------------------------------------
 // Background scan — multi-pass label lookup pipeline.
 // Pass 0: File metadata (if /music mounted) — most authoritative.
-// Pass 1: iTunes (20 concurrent, fast, no key).
-// Pass 2: TheAudioDB (5 concurrent, free, no key).
+// Pass 1: iTunes (3 concurrent, 500ms between batches, abort on 429/403).
+// Pass 2: TheAudioDB (serial, 1 req/sec).
 // Pass 3: MusicBrainz (serial, rate-limited) — broad coverage.
 // Pass 4: Discogs (serial, rate-limited) — last resort.
 // Results saved to SQLite — scan only needs to run once per album.
+// Errors are logged to data/labels-scan.log. On excessive errors in a pass
+// the scan finishes early; the next 12-hour auto-rescan will retry.
 // ---------------------------------------------------------------------------
 async function runLabelsIndexScan() {
   if (labelsIndex.building) return;
@@ -1160,7 +1180,9 @@ async function runLabelsIndexScan() {
 
   if (!toScan.length) {
     labelsIndex.builtAt = Date.now();
-    if (DEBUG) console.log("[labels] scan: all albums already cached");
+    const msg = "[labels] scan: all albums already cached (" + labelsIndex.count + " labels)";
+    if (DEBUG) console.log(msg);
+    appendLabelsLog(msg);
     return;
   }
 
@@ -1170,7 +1192,9 @@ async function runLabelsIndexScan() {
   const total = albumIndex.albums.length;
   let done = 0;
 
-  if (DEBUG) console.log("[labels] scan:", toScan.length, "albums to look up");
+  const startMsg = "[labels] scan started: " + toScan.length + " albums to look up (" + alreadyDone + " already cached)";
+  console.log(startMsg);
+  appendLabelsLog(startMsg);
 
   const saveLabelEntry = async (key, label, knownMbid, al) => {
     if (isLikelyNotALabel(label)) return;
@@ -1200,6 +1224,7 @@ async function runLabelsIndexScan() {
         overrideCount++;
       }
     }
+    if (overrideCount) appendLabelsLog("[labels:files] overrode " + overrideCount + " stale cache entries");
     if (DEBUG && overrideCount) console.log("[labels:files] overrode", overrideCount, "stale cache entries");
   }
   const needsApiScan = [];
@@ -1214,22 +1239,36 @@ async function runLabelsIndexScan() {
       needsApiScan.push(al);
     }
   }
-  if (DEBUG && fileLabelMap.size) console.log("[labels] file pass:", fileLabelMap.size, "found,", needsApiScan.length, "still need API");
+  if (fileLabelMap.size) {
+    const fileMsg = "[labels] pass 0 (files): " + fileLabelMap.size + " found in tags, " + needsApiScan.length + " still need API";
+    if (DEBUG) console.log(fileMsg);
+    appendLabelsLog(fileMsg);
+  }
 
   // Pass 1: iTunes — 3 concurrent, 500ms between batches.
   // Aborts the entire pass on first 429/403 to avoid getting IP-blocked.
   const needsAudioDB = [];
   const ITUNES_BATCH = 3;
   let itunesAborted = false;
+  let itunesErrors = 0;
   const itunesCheck = async (al) => {
     if (itunesAborted) { needsAudioDB.push(al); return; }
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     try {
       const label = await fetchLabelFromiTunes(al.title, al.subtitle);
-      if (label === ITUNES_BLOCKED) { itunesAborted = true; needsAudioDB.push(al); }
-      else if (label && !isLikelyNotALabel(label)) { await saveLabelEntry(key, label, null, al); }
+      if (label === ITUNES_BLOCKED) {
+        itunesAborted = true;
+        const msg = "[labels] pass 1 (iTunes): rate-limited (429/403) — aborting iTunes pass, will retry next scan window";
+        console.log(msg);
+        appendLabelsLog(msg);
+        needsAudioDB.push(al);
+      } else if (label && !isLikelyNotALabel(label)) { await saveLabelEntry(key, label, null, al); }
       else { needsAudioDB.push(al); }
-    } catch (e) { needsAudioDB.push(al); }
+    } catch (e) {
+      itunesErrors++;
+      appendLabelsLog("[labels:itunes] error for \"" + al.title + "\": " + e.message);
+      needsAudioDB.push(al);
+    }
     done++;
     labelsIndex.progress = (alreadyDone + done) / total;
   };
@@ -1238,47 +1277,115 @@ async function runLabelsIndexScan() {
     await itunesBatchWait();
     await Promise.allSettled(needsApiScan.slice(i, i + ITUNES_BATCH).map(itunesCheck));
   }
+  if (needsApiScan.length) {
+    const itunesMsg = "[labels] pass 1 (iTunes): done, " + needsAudioDB.length + " forwarded to next pass" +
+      (itunesAborted ? " (aborted — rate limited)" : "") +
+      (itunesErrors ? ", " + itunesErrors + " errors" : "");
+    if (DEBUG) console.log(itunesMsg);
+    appendLabelsLog(itunesMsg);
+  }
 
   // Pass 2: TheAudioDB — serial (1 req/sec rate limit on the free API).
-  if (DEBUG && needsAudioDB.length) console.log("[labels] TheAudioDB pass:", needsAudioDB.length, "albums");
+  if (needsAudioDB.length) {
+    const tadbStartMsg = "[labels] pass 2 (TheAudioDB): " + needsAudioDB.length + " albums";
+    if (DEBUG) console.log(tadbStartMsg);
+    appendLabelsLog(tadbStartMsg);
+  }
   const needsMB = [];
+  let tadbErrors = 0;
   for (const al of needsAudioDB) {
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     try {
       const label = await fetchLabelFromTheAudioDB(al.title, al.subtitle);
       if (label) { await saveLabelEntry(key, label, null, al); }
       else { needsMB.push(al); }
-    } catch (e) { needsMB.push(al); }
+    } catch (e) {
+      tadbErrors++;
+      appendLabelsLog("[labels:theaudiodb] error for \"" + al.title + "\": " + e.message);
+      needsMB.push(al);
+    }
+  }
+  if (needsAudioDB.length) {
+    const tadbMsg = "[labels] pass 2 (TheAudioDB): done, " + needsMB.length + " forwarded to MB" +
+      (tadbErrors ? ", " + tadbErrors + " errors" : "");
+    if (DEBUG) console.log(tadbMsg);
+    appendLabelsLog(tadbMsg);
   }
 
   // Pass 3: MusicBrainz for remaining misses — serial to respect rate limit.
-  if (DEBUG && needsMB.length) console.log("[labels] MB pass:", needsMB.length, "albums");
+  if (needsMB.length) {
+    const mbStartMsg = "[labels] pass 3 (MusicBrainz): " + needsMB.length + " albums";
+    if (DEBUG) console.log(mbStartMsg);
+    appendLabelsLog(mbStartMsg);
+  }
   const needsDiscogs = [];
+  let mbErrors = 0;
   for (const al of needsMB) {
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     try {
       const mbResult = await fetchLabelFromMusicBrainz(al.title, al.subtitle);
       if (mbResult) { await saveLabelEntry(key, mbResult.label, mbResult.mbid, al); }
       else { needsDiscogs.push(al); }
-    } catch (e) { needsDiscogs.push(al); }
+    } catch (e) {
+      mbErrors++;
+      appendLabelsLog("[labels:mb] error for \"" + al.title + "\": " + e.message);
+      needsDiscogs.push(al);
+    }
+  }
+  if (needsMB.length) {
+    const mbMsg = "[labels] pass 3 (MusicBrainz): done, " + needsDiscogs.length + " forwarded to Discogs" +
+      (mbErrors ? ", " + mbErrors + " errors" : "");
+    if (DEBUG) console.log(mbMsg);
+    appendLabelsLog(mbMsg);
   }
 
   // Pass 4: Discogs — serial, rate-limited, last resort.
-  if (DEBUG && needsDiscogs.length) console.log("[labels] Discogs pass:", needsDiscogs.length, "albums");
+  if (needsDiscogs.length) {
+    const discogsStartMsg = "[labels] pass 4 (Discogs): " + needsDiscogs.length + " albums";
+    if (DEBUG) console.log(discogsStartMsg);
+    appendLabelsLog(discogsStartMsg);
+  }
+  let discogsErrors = 0;
   for (const al of needsDiscogs) {
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     try {
       const label = await fetchLabelFromDiscogs(al.title, al.subtitle);
       if (label) { await saveLabelEntry(key, label, null, al); }
-    } catch (e) { /* keep scanning */ }
+    } catch (e) {
+      discogsErrors++;
+      appendLabelsLog("[labels:discogs] error for \"" + al.title + "\": " + e.message);
+    }
+  }
+  if (needsDiscogs.length) {
+    const discogsMsg = "[labels] pass 4 (Discogs): done" +
+      (discogsErrors ? ", " + discogsErrors + " errors" : "");
+    if (DEBUG) console.log(discogsMsg);
+    appendLabelsLog(discogsMsg);
   }
 
   labelsIndex.building = false;
   labelsIndex.builtAt  = Date.now();
   labelsIndex.count    = labelsIndex.map.size;
-  if (DEBUG) console.log("[labels] scan complete:", labelsIndex.count, "labels found");
+  const doneMsg = "[labels] scan complete: " + labelsIndex.count + " labels found";
+  console.log(doneMsg);
+  appendLabelsLog(doneMsg);
   kickFanArtFetches().catch(e => { if (DEBUG) console.error("[labels] fanart error:", e.message); });
 }
+
+// ---------------------------------------------------------------------------
+// Periodic auto-rescan — every 12 hours while paired with a Roon Core.
+// ---------------------------------------------------------------------------
+const LABELS_RESCAN_MS = 12 * 60 * 60 * 1000;
+setInterval(() => {
+  if (!core) return;
+  if (labelsIndex.building) return;
+  appendLabelsLog("[labels] 12-hour auto-rescan triggered");
+  runLabelsIndexScan().catch(e => {
+    const msg = "[labels] auto-rescan error: " + e.message;
+    console.error(msg);
+    appendLabelsLog(msg);
+  });
+}, LABELS_RESCAN_MS);
 
 // Fetch label logo from Fan Art TV for a single label group key.
 // Results (including "no logo found" = null) are persisted so we don't re-query.
@@ -2201,10 +2308,26 @@ app.post("/api/labels/rescan", (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
   if (labelsIndex.building) return res.json({ ok: false, reason: "scan already running" });
   labelsIndex.builtAt = 0;
+  appendLabelsLog("[labels] manual rescan requested via web UI");
   runLabelsIndexScan().catch(e => {
-    if (DEBUG) console.error("[labels] rescan error:", e.message);
+    const msg = "[labels] rescan error: " + e.message;
+    if (DEBUG) console.error(msg);
+    appendLabelsLog(msg);
   });
   res.json({ ok: true });
+});
+
+// Serve the scan log file for download / copy.
+app.get("/api/labels-scan-log", (req, res) => {
+  try {
+    const log = fs.readFileSync(LABELS_LOG_FILE, "utf8");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=\"labels-scan.log\"");
+    res.send(log);
+  } catch (e) {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send("No scan log yet — run a scan first.\n");
+  }
 });
 
 // Debug: dump the browse root + Library contents so we can see whether (and
