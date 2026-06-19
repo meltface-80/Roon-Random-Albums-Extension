@@ -2422,6 +2422,7 @@
 
   async function showArtistAlbums(artistName) {
     if (!artistName) return;
+    if (artistViewActive) exitArtistView();
     artistViewActive = true;
     savedGridHtml    = grid.innerHTML;
     savedCountHtml   = countBar ? countBar.innerHTML : "";
@@ -2464,9 +2465,7 @@
           frag.appendChild(hdr);
         }
         for (const a of j.primary) {
-          frag.appendChild(window.__buildAlbumTile
-            ? window.__buildAlbumTile(a)
-            : buildSimpleTile(a));
+          frag.appendChild(window.__buildAlbumTile(a));
         }
       }
 
@@ -2476,9 +2475,7 @@
         hdr.textContent = "Also appears on";
         frag.appendChild(hdr);
         for (const a of j.featured) {
-          frag.appendChild(window.__buildAlbumTile
-            ? window.__buildAlbumTile(a)
-            : buildSimpleTile(a));
+          frag.appendChild(window.__buildAlbumTile(a));
         }
       }
 
@@ -2491,37 +2488,6 @@
         document.getElementById("artist-back-btn").addEventListener("click", exitArtistView);
       }
     }
-  }
-
-  function buildSimpleTile(a) {
-    const btn = document.createElement("button");
-    btn.className = "album-btn";
-    btn.type = "button";
-    const artWrap = document.createElement("div");
-    artWrap.className = "album-art-wrap";
-    if (a.image_key) {
-      const img = document.createElement("img");
-      img.src = "/api/image/" + encodeURIComponent(a.image_key) + "?size=500";
-      img.alt = a.title || "";
-      img.className = "album-art";
-      artWrap.appendChild(img);
-    }
-    const meta = document.createElement("div");
-    meta.className = "album-meta";
-    const titleEl = document.createElement("div");
-    titleEl.className = "album-title";
-    titleEl.textContent = a.title || "Untitled";
-    const artistEl = document.createElement("div");
-    artistEl.className = "album-artist";
-    artistEl.textContent = a.subtitle || "";
-    meta.appendChild(titleEl);
-    meta.appendChild(artistEl);
-    btn.appendChild(artWrap);
-    btn.appendChild(meta);
-    btn.addEventListener("click", () => {
-      if (window.__openAlbum) window.__openAlbum(a);
-    });
-    return btn;
   }
 
   window.__showArtistAlbums = showArtistAlbums;

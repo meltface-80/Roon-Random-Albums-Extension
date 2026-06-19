@@ -618,25 +618,8 @@ const BROWSER_UA =
 const mbCache    = new Map();
 const qobuzCache = new Map();
 const wikiCache  = new Map();
-let mbLastReq      = 0;
-let qobuzLastReq   = 0;
-let discogsLastReq = 0;
-
-// Discogs OAuth app credentials — embedded so the extension works for all users.
-const DISCOGS_KEY    = "KFbYgRaYdpnKkHBRB0lV";
-const DISCOGS_SECRET = "UzDPIrwYxEZkIRtvncPoOYovwvvKHQHf";
-
-// ---------------------------------------------------------------------------
-// Record-label index — built from Qobuz-scraped data.
-//
-// Three layers, applied fastest-first:
-//   1. Disk cache  (labels-cache.json) — persists across restarts; instant load.
-//   2. In-memory qobuzCache — populated as album modals are opened.
-//   3. Background Qobuz scan — 5 parallel workers; runs once per session.
-//
-// Because results are saved to disk, the full scan only has to happen once.
-// Subsequent restarts seed from the file in milliseconds.
-// ---------------------------------------------------------------------------
+let mbLastReq    = 0;
+let qobuzLastReq = 0;
 
 // ---------------------------------------------------------------------------
 // Labels database — SQLite via better-sqlite3.
@@ -930,38 +913,7 @@ async function fetchLabelFromiTunes(title, artist) {
 }
 
 // ---------------------------------------------------------------------------
-// Discogs label lookup — primary source.  60 req/min authenticated.
-// Returns the label name string, or null if not found / self-released.
-// ---------------------------------------------------------------------------
-async function fetchLabelFromDiscogs(title, artist) {
-  if (!title) return null;
-  await discogsWait();
-  const params = new URLSearchParams({ type: "release", release_title: title });
-  if (artist) params.set("artist", artist);
-  const url = `https://api.discogs.com/database/search?${params}`;
-  try {
-    const json = await httpJson(url, {
-      "Authorization": `Discogs key=${DISCOGS_KEY}, secret=${DISCOGS_SECRET}`,
-      "User-Agent": MB_USER_AGENT
-    });
-    const results = json && json.results;
-    if (Array.isArray(results) && results.length) {
-      const labels = results[0].label;
-      if (Array.isArray(labels) && labels.length) {
-        const name = labels[0];
-        // Skip self-released / unknown — let MusicBrainz try instead.
-        if (/not on label|self.?released/i.test(name)) return null;
-        return name;
-      }
-    }
-  } catch (e) {
-    if (DEBUG) console.error("[labels:discogs]", e.message);
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// MusicBrainz label lookup — fallback for albums Discogs misses.
+// MusicBrainz label lookup — fallback for albums iTunes misses.
 // Returns { label, mbid } for a release, or null if not found.
 // Rate limited via the shared mbWait() (1.1 s between requests).
 // ---------------------------------------------------------------------------
@@ -1005,9 +957,9 @@ async function fetchLabelMbidFromMusicBrainz(labelName) {
 }
 
 // ---------------------------------------------------------------------------
-// Background scan — uses Discogs (primary) + MusicBrainz (fallback).
-// Rate limited to ~1 req/sec each. Results saved to disk — scan only
-// needs to run once; restarts load instantly from labels-cache.json.
+// Background scan — pass 1: iTunes (20 concurrent, fast).
+// Pass 2: MusicBrainz (serial, rate-limited) for any iTunes misses.
+// Results saved to SQLite — scan only needs to run once.
 // ---------------------------------------------------------------------------
 async function runLabelsIndexScan() {
   if (labelsIndex.building) return;
@@ -1017,8 +969,6 @@ async function runLabelsIndexScan() {
   }
   seedLabelsFromCache();
 
-  // Scan albums not yet in the disk cache (empty-string entries are excluded
-  // from the cache on load, so they'll be retried here).
   const toScan = albumIndex.albums.filter(al => {
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     return !labelsOverride.has(key) && !labelDiskCache.has(key);
@@ -1036,47 +986,47 @@ async function runLabelsIndexScan() {
   const total = albumIndex.albums.length;
   let done = 0;
 
-  if (DEBUG) console.log("[labels] iTunes+MusicBrainz scan:", toScan.length, "albums to look up");
+  if (DEBUG) console.log("[labels] scan:", toScan.length, "albums to look up");
 
-  const processAlbum = async (al) => {
+  const saveLabelEntry = async (key, label, knownMbid, al) => {
+    setLabelName(key, label);
+    labelsIndexAddAlbum(label, al);
+    const gk = labelGroupKey(label);
+    if (gk && !labelMbidCache.has(gk)) {
+      const resolvedMbid = knownMbid || await fetchLabelMbidFromMusicBrainz(label);
+      if (resolvedMbid) {
+        setLabelMbid(gk, resolvedMbid);
+        const entry = labelsIndex.map.get(gk);
+        if (entry && !entry.mbid) entry.mbid = resolvedMbid;
+      }
+    }
+  };
+
+  // Pass 1: iTunes — 20 concurrent, no rate limit.
+  const needsMB = [];
+  const SCAN_BATCH = 20;
+  const itunesCheck = async (al) => {
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     try {
-      let label = null, mbid = null;
-
-      // Primary: iTunes — fast, no rate limit, returns recordLabel directly.
-      label = await fetchLabelFromiTunes(al.title, al.subtitle);
-
-      if (!label) {
-        // Fallback: MusicBrainz — also gives us the MBID directly.
-        const mbResult = await fetchLabelFromMusicBrainz(al.title, al.subtitle);
-        if (mbResult) { label = mbResult.label; mbid = mbResult.mbid; }
-      }
-
-      if (label) {
-        setLabelName(key, label);
-        labelsIndexAddAlbum(label, al);
-
-        // Resolve MBID for Fan Art TV — once per unique label, not per album.
-        const gk = labelGroupKey(label);
-        if (gk && !labelMbidCache.has(gk)) {
-          const resolvedMbid = mbid || await fetchLabelMbidFromMusicBrainz(label);
-          if (resolvedMbid) {
-            setLabelMbid(gk, resolvedMbid);
-            const entry = labelsIndex.map.get(gk);
-            if (entry && !entry.mbid) entry.mbid = resolvedMbid;
-          }
-        }
-      }
-    } catch (e) { /* keep scanning */ }
+      const label = await fetchLabelFromiTunes(al.title, al.subtitle);
+      if (label) { await saveLabelEntry(key, label, null, al); }
+      else { needsMB.push(al); }
+    } catch (e) { needsMB.push(al); }
     done++;
     labelsIndex.progress = (alreadyDone + done) / total;
   };
-
-  // Run 20 albums concurrently — iTunes handles this fine.
-  // MusicBrainz fallback serialises itself via mbWait(), so no overload risk.
-  const SCAN_BATCH = 20;
   for (let i = 0; i < toScan.length; i += SCAN_BATCH) {
-    await Promise.allSettled(toScan.slice(i, i + SCAN_BATCH).map(processAlbum));
+    await Promise.allSettled(toScan.slice(i, i + SCAN_BATCH).map(itunesCheck));
+  }
+
+  // Pass 2: MusicBrainz for iTunes misses — serial to respect rate limit.
+  if (DEBUG && needsMB.length) console.log("[labels] MB pass:", needsMB.length, "albums");
+  for (const al of needsMB) {
+    const key = normalize(al.title) + "||" + normalize(al.subtitle);
+    try {
+      const mbResult = await fetchLabelFromMusicBrainz(al.title, al.subtitle);
+      if (mbResult) { await saveLabelEntry(key, mbResult.label, mbResult.mbid, al); }
+    } catch (e) { /* keep scanning */ }
   }
 
   labelsIndex.building = false;
@@ -1133,11 +1083,6 @@ async function mbWait() {
   const elapsed = Date.now() - mbLastReq;
   if (elapsed < 1100) await new Promise(r => setTimeout(r, 1100 - elapsed));
   mbLastReq = Date.now();
-}
-async function discogsWait() {
-  const elapsed = Date.now() - discogsLastReq;
-  if (elapsed < 1100) await new Promise(r => setTimeout(r, 1100 - elapsed));
-  discogsLastReq = Date.now();
 }
 async function qobuzWait() {
   const elapsed = Date.now() - qobuzLastReq;
@@ -2094,29 +2039,11 @@ app.get("/api/album", async (req, res) => {
   }
 });
 
-// Library stats — currently just the total album count Roon reports for the
-// "albums" hierarchy.  Shown in the header so you know the size of the pool
-// random picks are drawn from.
-let _albumCountCache = { value: null, at: 0 };
-app.get("/api/library-stats", async (req, res) => {
+// Library stats — served directly from albumIndex (already built in memory).
+app.get("/api/library-stats", (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
-  try {
-    // Cache for 60s so repeated header loads don't re-walk the hierarchy.
-    const now = Date.now();
-    if (_albumCountCache.value != null && now - _albumCountCache.at < 60000) {
-      return res.json({ albums: _albumCountCache.value, cached: true });
-    }
-    const sessionKey = "rra_stats_" + Math.random().toString(36).slice(2, 10);
-    await browse({ hierarchy: "albums", pop_all: true, multi_session_key: sessionKey });
-    const head = await load({
-      hierarchy: "albums", offset: 0, count: 1, multi_session_key: sessionKey
-    });
-    const total = head.list && head.list.count ? head.list.count : 0;
-    _albumCountCache = { value: total, at: now };
-    res.json({ albums: total });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  const count = albumIndex.count;
+  res.json({ albums: count, building: count === 0 && !!albumIndex.building });
 });
 
 // ---------------------------------------------------------------------------

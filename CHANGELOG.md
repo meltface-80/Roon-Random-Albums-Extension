@@ -2,6 +2,19 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.34] — 2026-06-19
+
+### Changed
+- **Labels scan: two-pass strategy** — iTunes lookups now run first in batches of 20 (fast, no rate limit). Only albums iTunes misses are passed to MusicBrainz, which runs serially to respect the 1.1-second rate limit. Reduces total scan time for large libraries.
+- **Library stats: served from in-memory index** — `/api/library-stats` now reads directly from `albumIndex.count` instead of walking the Roon browse hierarchy on each request. Eliminates the 60-second cache and the background Roon API call entirely.
+- **Artist view re-entry guard** — calling `showArtistAlbums()` while already in artist view now exits cleanly before rebuilding, preventing stale grid/count state.
+
+### Removed
+- **Dead code cleanup** — removed `fetchLabelFromDiscogs()`, `discogsWait()`, the unused `_albumCountCache` variable, the `buildSimpleTile()` fallback function, and the stale Qobuz-data comment block. Removed dead CSS rules: `.brand`, `.brand-mark`, `.brand-logo`, `.brand-name`, `.filter-grid`, `.filter-grid .filter-row`, `.filter-loading`, `.filter-backdrop`.
+
+### Fixed
+- **`.count-text` missing from CSS** — the class used in the artist view count bar was referenced in JS but absent from the stylesheet; added the rule.
+
 ## [1.5.33] — 2026-06-19
 
 ### Fixed

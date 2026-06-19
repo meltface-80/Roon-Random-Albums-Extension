@@ -91,14 +91,6 @@ button { font-family: inherit; }
 }
 [data-theme="light"] .topbar { background: rgba(246,245,242,.85); }
 
-.brand { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
-.brand-mark { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
-.brand-logo {
-  display: block;
-  height: 22px;
-  width: auto;
-  color: var(--text);
-}
 .album-count {
   font-size: 13px;
   font-weight: 600;
@@ -148,7 +140,6 @@ button { font-family: inherit; }
 @media (min-width: 720px) {
   .topbar { padding: 14px 22px; }
   .topbar-row { gap: 16px; }
-  .brand-name { font-size: 21px; }
   .primary-btn { width: auto; padding: 0 16px; }
   .primary-btn span { display: inline; }
 }
@@ -1469,35 +1460,8 @@ main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 }
 .filter-hint { margin-top: 6px; }
 
-/* Decades — 3-column compact grid */
-.filter-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 0 6px;
-}
-.filter-grid .filter-row {
-  justify-content: center;
-  padding: 10px 8px;
-  font-weight: 600;
-}
-
 /* Genres — single column list (longer titles) */
 .filter-list { padding: 0; }
-.filter-loading {
-  padding: 16px;
-  color: var(--text-faint);
-  font-size: 13px;
-  text-align: center;
-}
-
-/* Backdrop catches outside taps */
-.filter-backdrop {
-  position: fixed; inset: 0;
-  z-index: 79;
-  background: transparent;
-}
-.filter-backdrop.hidden { display: none; }
 
 /* ------------------------------------------------------------------ */
 /*  Settings bottom sheet                                              */
@@ -1541,6 +1505,7 @@ main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
   flex-shrink: 0;
 }
 .artist-view-back:hover { color: var(--text); background: var(--bg-elev); }
+.count-text { font-size: 13px; color: var(--text-dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .artist-section-header {
   grid-column: 1 / -1;
   font-size: 13px; font-weight: 600; color: var(--text-faint);
