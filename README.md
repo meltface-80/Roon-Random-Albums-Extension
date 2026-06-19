@@ -69,28 +69,30 @@ If you're running an older native (non-Docker) install, the app will show a
 migration banner automatically with copy-ready commands. Or follow these steps:
 
 ```bash
-# 1. Download and build the Docker image
+# 1. Stop the native service
+sudo systemctl stop roon-random-albums
+sudo systemctl disable roon-random-albums
+
+# 2. Download and build the Docker image
 wget https://github.com/meltface-80/Roon-Random-Albums-Extension/raw/main/roon-random-albums-v1.5.35-docker.tar.gz
 tar -xzf roon-random-albums-v1.5.35-docker.tar.gz
 docker build -t roon-random-albums:1.5.35 .
 
-# 2. Run the Docker container
+# 3. Run the Docker container
 docker run -d \
   --name roon-random-albums \
   --restart unless-stopped \
   --network host \
   -v roon-random-albums-data:/app/data \
   roon-random-albums:1.5.35
-
-# 3. Stop and disable the native service
-sudo systemctl stop roon-random-albums
-sudo systemctl disable roon-random-albums
 ```
 
-The old installation is not removed automatically. Once you've confirmed the Docker
-container is running and visible in Roon, clean up the native install.
+Confirm the extension appears in **Roon → Settings → Extensions** and is working
+before proceeding. The old files are not deleted automatically.
 
-First, find where the old install lives — the path varies depending on how it was set up:
+### Cleaning up the old install
+
+Find where the native install lives — the path varies:
 
 ```bash
 find / -name "roon-random-albums" -type d 2>/dev/null
