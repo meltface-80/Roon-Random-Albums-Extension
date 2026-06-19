@@ -43,7 +43,7 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   -v roon-random-albums-data:/app/data \
-  -v /mnt/dietpi_userdata/4tb/Music:/music:ro \
+  -v /your/path/to/Music:/music:ro \
   roon-random-albums:1.5.37
 ```
 
@@ -98,7 +98,7 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   -v roon-random-albums-data:/app/data \
-  -v /mnt/dietpi_userdata/4tb/Music:/music:ro \
+  -v /your/path/to/Music:/music:ro \
   roon-random-albums:1.5.37
 ```
 
