@@ -14,7 +14,7 @@ A web UI that shows a screenful of random albums from your Roon library, with in
 
 
 ## Updates
-**v1.5.37** - Withbthis version I have been working on the labels section of the extension. I've changed the order to match labels and added a few extra tools to help. The biggest change is the :ro (read only) access to your local files. Why? If like me youbhave metadata including labels, this becomes the fast way to build the labels page. Its easily done if stored on the same server. For network shares, these will work once you `mnt` the share and then add its path to the docker build commands below. The choice is yours to add it or not. It's docker so needs to be added via terminal. 
+**v1.5.37** - With this version I have been working on the labels section of the extension. I've changed the order to match labels and added a few extra tools to help. The biggest change is the :ro (read only) access to your local files. Why? If like me youbhave metadata including labels, this becomes the fast way to build the labels page. Its easily done if stored on the same server. For network shares, these will work once you `mnt` the share and then add its path to the docker build commands below. The choice is yours to add it or not. It's docker so needs to be added via terminal. 
 
 
 ## Features
