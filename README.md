@@ -29,7 +29,6 @@ sudo docker rm roon-random-albums
 # this can be skipped if you have installed to `/opt/` before
 sudo mkdir -p /opt/roon-random-albums
 
-
 cd /opt/roon-random-albums
 wget https://raw.githubusercontent.com/meltface-80/Roon-Random-Albums-Extension/main/roon-random-albums-v1.5.37-docker.tar.gz
 tar -xzf roon-random-albums-v1.5.37-docker.tar.gz
@@ -39,6 +38,7 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   -v roon-random-albums-data:/app/data \
+# set your music path here
   -v /your/path/to/Music:/music:ro \
   roon-random-albums:1.5.37
 ```
