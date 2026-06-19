@@ -58,11 +58,13 @@ jobs:
           if [ -n "$TARBALL" ] && [ -f "$TARBALL" ]; then
             gh release create "$TAG" "$TARBALL" \
               --title "Random Albums $TAG" \
-              --notes "${{ steps.notes.outputs.notes }}"
+              --notes "${{ steps.notes.outputs.notes }}" \
+              --prerelease
           else
             gh release create "$TAG" \
               --title "Random Albums $TAG" \
-              --notes "${{ steps.notes.outputs.notes }}"
+              --notes "${{ steps.notes.outputs.notes }}" \
+              --prerelease
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
