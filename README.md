@@ -14,8 +14,24 @@ A web UI that shows a screenful of random albums from your Roon library, with in
 
 
 ## Updates
-**v1.5.37** - With this version I have been working on the labels section of the extension. I've changed the order to match labels and added a few extra tools to help. The biggest change is the :ro (read only) access to your local files. Why? If like me youbhave metadata including labels, this becomes the fast way to build the labels page. Its easily done if stored on the same server. For network shares, these will work once you `mnt` the share and then add its path to the docker build commands below. The choice is yours to add it or not. It's docker so needs to be added via terminal. 
+**v1.5.37** - With this version I have been working on the labels section of the extension. I've changed the order to match labels and added a few extra tools to help. The biggest change is the :ro (read only) access to your local files. Why? If like me youbhave metadata including labels, this becomes the fast way to build the labels page. Its easily done if stored on the same server. For network shares, these will work once you `mnt` the share and then add its path to the docker build commands below. The choice is yours to add it or not. It's docker so needs to be added via terminal. I've also set the directory to `/opt/` and the `data` directory remains untouched. 
 
+```
+sudo docker stop roon-random-albums
+sudo docker rm roon-random-albums
+sudo mkdir -p /opt/roon-random-albums
+cd /opt/roon-random-albums
+wget https://raw.githubusercontent.com/meltface-80/Roon-Random-Albums-Extension/main/roon-random-albums-v1.5.37-docker.tar.gz
+tar -xzf roon-random-albums-v1.5.37-docker.tar.gz
+docker build -t roon-random-albums:1.5.37 .
+docker run -d \
+  --name roon-random-albums \
+  --restart unless-stopped \
+  --network host \
+  -v roon-random-albums-data:/app/data \
+  -v /your/path/to/Music:/music:ro \
+  roon-random-albums:1.5.37
+```
 
 ## Features
 
@@ -40,7 +56,7 @@ Each release ships a `*-docker.tar.gz`. Download it, build the image, and run:
 ```bash
 sudo mkdir -p /opt/roon-random-albums
 cd /opt/roon-random-albums
-wget https://github.com/meltface-80/Roon-Random-Albums-Extension/raw/main/roon-random-albums-v1.5.37-docker.tar.gz
+wget https://raw.githubusercontent.com/meltface-80/Roon-Random-Albums-Extension/main/roon-random-albums-v1.5.37-docker.tar.gz
 tar -xzf roon-random-albums-v1.5.37-docker.tar.gz
 docker build -t roon-random-albums:1.5.37 .
 docker run -d \
@@ -91,7 +107,7 @@ sudo systemctl disable roon-random-albums
 # 2. Create the build directory and download the tarball
 sudo mkdir -p /opt/roon-random-albums
 cd /opt/roon-random-albums
-wget https://github.com/meltface-80/Roon-Random-Albums-Extension/raw/main/roon-random-albums-v1.5.37-docker.tar.gz
+wget https://raw.githubusercontent.com/meltface-80/Roon-Random-Albums-Extension/main/roon-random-albums-v1.5.37-docker.tar.gz
 tar -xzf roon-random-albums-v1.5.37-docker.tar.gz
 
 # 3. Build the Docker image
