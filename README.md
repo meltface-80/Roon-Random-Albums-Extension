@@ -6,7 +6,7 @@
 
 # Random Albums — a Roon extension
 
-> **Note:** If you are running a version newer than v1.5.35, please roll back. A bad release sequence broke several features. Stop and remove your container, then reinstall from the v1.5.35 tarball using the instructions below.
+> **Note:** If you are running a v1.6.x build, please roll back. A bad release sequence broke several features. Stop and remove your container, then reinstall from the v1.5.35 tarball using the instructions below.
 
 A web UI that shows a screenful of random albums from your Roon library, with instant whole-library search, playback actions targeting any zone, and more.
 
