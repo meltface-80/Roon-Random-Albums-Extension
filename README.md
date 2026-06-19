@@ -107,9 +107,9 @@ find / -name "roon-random-albums" -type d 2>/dev/null
 sudo rm /etc/systemd/system/roon-random-albums.service
 sudo systemctl daemon-reload
 
-# Remove the native app files — safe to run even if the directory is shared with your Docker build
+# Remove the native-only files — safe even if the directory is shared with your Docker build
 cd /path/to/roon-random-albums
-rm -rf node_modules index.js launcher.js lib public package.json package-lock.json config.json
+rm -rf node_modules package-lock.json config.json *.tar.gz
 ```
 
 Your Roon pairing, listening history, and label cache are all safe — they are stored
