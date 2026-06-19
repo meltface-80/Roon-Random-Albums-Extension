@@ -4,6 +4,10 @@
 
 </div>
 
+# Note: If you are on a newer version than the latest below, I recommend you stop, rm and delete the `roon-random-albums` directory. Claude Code had a bad day and broke several new features and then broke old features in the process of trying to fix everything else. 
+
+---
+
 # Random Albums — a Roon extension
 
 A web UI that shows a screenful of random albums from your Roon library, with
