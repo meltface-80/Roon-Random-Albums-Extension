@@ -1238,8 +1238,15 @@
       artEl.innerHTML = "";
       const words = (title || "").trim().split(/\s+/).filter(Boolean);
       const list = words.length ? words : ["?"];
-      // Scale font down for longer names so they fit in the tile
-      const fs = list.length <= 2 ? "1.05em" : list.length <= 4 ? "0.9em" : "0.75em";
+      // Size by the longest single word — tile width is the constraint, not word count.
+      // "3 Beads of Sweat" (max=5) should be larger than "Rockproduktionen" (max=16).
+      const maxLen = Math.max(...list.map(w => w.length));
+      const fs = maxLen <= 4  ? "1.5em"
+               : maxLen <= 6  ? "1.25em"
+               : maxLen <= 8  ? "1.05em"
+               : maxLen <= 11 ? "0.88em"
+               : maxLen <= 14 ? "0.75em"
+               :                "0.62em";
       artEl.style.fontSize = fs;
       list.forEach(word => {
         const span = document.createElement("span");

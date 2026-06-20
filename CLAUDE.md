@@ -94,3 +94,4 @@ docker run -d \
 | v1.5.43 | pre-release | Progress bar >100% fix             |
 | v1.5.44 | pre-release | Label name text tiles              |
 | v1.5.45 | pre-release | Remove album-art fallback from label tiles |
+| v1.5.46 | pre-release | Label text size by longest word not word count |

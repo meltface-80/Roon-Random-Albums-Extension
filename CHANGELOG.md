@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.46] — 2026-06-20
+
+### Fixed
+- **Label text tiles: font size now scales by longest word, not word count** — the previous approach made 4 short words ("3 Beads of Sweat") smaller than 2 long words. Font is now sized to fit the longest word in the label name, so the tile width is always the constraining factor. Short words at any count display larger; only genuinely long words (e.g. "Rockproduktionen") force a smaller size.
+
 ## [1.5.45] — 2026-06-20
 
 ### Fixed
