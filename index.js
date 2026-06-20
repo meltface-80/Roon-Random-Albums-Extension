@@ -840,6 +840,7 @@ const COUNTRY_REGION_SUFFIX_RE = /\s+(United\s+States|United\s+Kingdom|New\s+Zea
 function labelGroupKey(name) {
   if (!name) return "";
   let s = name.trim()
+    .replace(/[,;:]+$/, "").trim()
     .replace(COUNTRY_REGION_SUFFIX_RE, "").trim()
     .replace(LABEL_SUFFIX_RE, "").trim()
     .replace(LABEL_SUFFIX_RE, "").trim()
@@ -850,6 +851,7 @@ function labelGroupKey(name) {
 function canonicalLabelName(name) {
   if (!name) return name;
   return name.trim()
+    .replace(/[,;:]+$/, "").trim()
     .replace(COUNTRY_REGION_SUFFIX_RE, "").trim()
     .replace(LABEL_SUFFIX_RE, "").trim()
     .replace(LABEL_SUFFIX_RE, "").trim()
@@ -1516,22 +1518,26 @@ async function kickFanArtFetches() {
 // ---------------------------------------------------------------------------
 async function fetchLogoFromDiscogs(labelName) {
   await discogsWait();
-  const url = `https://api.discogs.com/database/search?type=label&q=${encodeURIComponent(labelName)}&per_page=5&key=${DISCOGS_KEY}&secret=${DISCOGS_SECRET}`;
+  const url = `https://api.discogs.com/database/search?type=label&q=${encodeURIComponent(labelName)}&per_page=5`;
   try {
-    const json = await httpJson(url, { "User-Agent": MB_USER_AGENT }, 10000);
+    const json = await httpJson(url, {
+      "Authorization": `Discogs key=${DISCOGS_KEY}, secret=${DISCOGS_SECRET}`,
+      "User-Agent": MB_USER_AGENT
+    }, 10000);
     const results = json && json.results;
-    if (!Array.isArray(results) || !results.length) return null;
+    if (!Array.isArray(results) || !results.length) return { logo: null, reason: "empty" };
     const normTarget = labelGroupKey(labelName);
     let match = results.find(r => labelGroupKey(r.title || "") === normTarget);
     if (!match) match = results.find(r => labelGroupKey(r.title || "").startsWith(normTarget));
     if (!match) match = results[0];
     const img = match.cover_image || match.thumb || null;
-    // Filter placeholder/spacer images
-    if (!img || img.endsWith(".gif") || /no[-_]image|spacer|avatar|default[-_]label/i.test(img)) return null;
-    return img;
+    if (!img || img.endsWith(".gif") || /no[-_]image|no[-_]label|spacer|avatar|default[-_]label/i.test(img)) {
+      return { logo: null, reason: "filtered" };
+    }
+    return { logo: img, reason: "ok" };
   } catch (e) {
     if (DEBUG) console.error("[labels:discogs:logo]", e.message);
-    return null;
+    return { logo: null, reason: "error" };
   }
 }
 
@@ -1546,23 +1552,24 @@ async function kickDiscogsLogoFetches() {
   if (!pending.length) return;
   if (DEBUG) console.log("[labels:discogs:logos] fetching logos for", pending.length, "labels");
   appendLabelsLog("[labels:discogs:logos] fetching logos for " + pending.length + " labels");
-  let found = 0;
+  let found = 0, emptyCount = 0, filteredCount = 0, errorCount = 0;
   for (const { groupKey, display } of pending) {
     discogsLogoTried.add(groupKey);
-    try {
-      const logoUrl = await fetchLogoFromDiscogs(display);
-      if (logoUrl) {
-        setLabelLogo(groupKey, logoUrl);
-        const entry = labelsIndex.map.get(groupKey);
-        if (entry) entry.logo_url = logoUrl;
-        found++;
-        if (DEBUG) console.log("[labels:discogs:logo]", display, "→", logoUrl);
-      }
-    } catch (e) {
-      if (DEBUG) console.error("[labels:discogs:logo]", display, e.message);
-    }
+    const { logo, reason } = await fetchLogoFromDiscogs(display);
+    if (logo) {
+      setLabelLogo(groupKey, logo);
+      const entry = labelsIndex.map.get(groupKey);
+      if (entry) entry.logo_url = logo;
+      found++;
+      if (DEBUG) console.log("[labels:discogs:logo]", display, "→", logo);
+    } else if (reason === "empty")    emptyCount++;
+    else if (reason === "filtered") filteredCount++;
+    else                             errorCount++;
   }
-  const msg = "[labels:discogs:logos] done: " + found + "/" + pending.length + " logos found";
+  const msg = "[labels:discogs:logos] done: " + found + "/" + pending.length + " logos found" +
+    (emptyCount    ? ", " + emptyCount    + " no results"     : "") +
+    (filteredCount ? ", " + filteredCount + " placeholder img" : "") +
+    (errorCount    ? ", " + errorCount    + " errors"          : "");
   if (DEBUG) console.log(msg);
   appendLabelsLog(msg);
 }

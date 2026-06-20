@@ -2,6 +2,14 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.50] — 2026-06-20
+
+### Fixed
+- **Label fragmentation** — trailing commas (and semicolons/colons) in file-tag label names (e.g. "A&M Records,") now stripped before suffix normalisation, so "A&M Records," and "A&M" correctly merge into one tile.
+- **Discogs logo auth** — logo search was using key/secret as query params rather than the `Authorization: Discogs key=…, secret=…` header used by the working label-data fetch; switched to the header, which Discogs requires for authenticated API calls.
+- **Discogs placeholder filter** — added `no-label` pattern to the image filter regex to catch Discogs' own "no image" CDN URL.
+- **Discogs logo diagnostics** — completion log now breaks down result counts: logos found / no results / placeholder filtered / errors, so problems are visible in the scan log without enabling debug mode.
+
 ## [1.5.49] — 2026-06-20
 
 ### Added
