@@ -2,6 +2,17 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.58] — 2026-06-20
+
+### Fixed
+- **Merge bar / action bar invisible on mobile** — `#label-merge-bar`, `#album-action-bar`, and `#label-unmerge-sheet` were inside `.app` which has `z-index: 0`, placing them behind the mini-transport (`z-index: 70`) and modal (`z-index: 50`). Moved all three elements outside `.app` so they sit in the root stacking context at their own `z-index: 75/80`.
+- **Two Select buttons (iPad) / cluttered topbar** — removed the separate `#album-select-toggle` and `#label-select-toggle` buttons. Selection mode is now entered by long-pressing any album or label tile (500ms, with haptic feedback). A single "Done" button (`#select-done-btn`) appears in the topbar when any select mode is active.
+- **Scanning progress message overflows topbar** — removed the `(scanning… X%)` suffix from the count text. Added a slim 2px progress bar at the very bottom of the topbar that animates as the scan advances.
+- **File scan stalls with large libraries** — `buildFileLabelMap()` now only runs when `toScan.length > 10` (skips file scan for small incremental additions). Progress is reported during the file scan via an `onProgress` callback so the bar begins moving immediately.
+
+### Added
+- **Force rescan button in Settings** — a "Force rescan" button clears the label name cache (logos and MBIDs are kept) and triggers a complete fresh scan from all sources. Useful after importing new music or if label data looks wrong.
+
 ## [1.5.57] — 2026-06-20
 
 ### Fixed

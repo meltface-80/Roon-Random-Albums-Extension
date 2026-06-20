@@ -32,7 +32,7 @@
   const modalActs   = document.getElementById("modal-actions");
   const modalTracks = document.getElementById("modal-tracks");
 
-  const albumSelectToggle    = document.getElementById("album-select-toggle");
+  const selectDoneBtn        = document.getElementById("select-done-btn");
   const albumActionBar       = document.getElementById("album-action-bar");
   const albumActionInfo      = document.getElementById("album-action-info");
   const albumPlayNowBtn      = document.getElementById("album-play-now-btn");
@@ -125,6 +125,20 @@
     banner.classList.remove("hidden");
   }
 
+  // ----- Scan progress bar -----
+  function updateScanBar(progress) {
+    const bar  = document.getElementById("scan-progress-bar");
+    const fill = document.getElementById("scan-progress-fill");
+    if (!bar || !fill) return;
+    if (progress === null || progress === undefined) {
+      bar.classList.add("hidden");
+      fill.style.width = "0%";
+    } else {
+      bar.classList.remove("hidden");
+      fill.style.width = Math.round((progress || 0) * 100) + "%";
+    }
+  }
+
   // ----- Skeletons -----
   function renderSkeletons(n) {
     grid.innerHTML = "";
@@ -139,6 +153,23 @@
         </div>`;
       grid.appendChild(el);
     }
+  }
+
+  // ----- Long-press utility -----
+  function addLongPress(el, callback) {
+    let timer = null;
+    let moved = false;
+    const onStart = () => { moved = false; timer = setTimeout(() => { if (!moved) { if (navigator.vibrate) navigator.vibrate(25); callback(); } }, 500); };
+    const onMove  = () => { moved = true; clearTimeout(timer); timer = null; };
+    const onEnd   = () => { clearTimeout(timer); timer = null; };
+    el.addEventListener("touchstart",  onStart,  { passive: true });
+    el.addEventListener("touchmove",   onMove,   { passive: true });
+    el.addEventListener("touchend",    onEnd);
+    el.addEventListener("touchcancel", onEnd);
+    el.addEventListener("mousedown",   onStart);
+    el.addEventListener("mousemove",   onMove);
+    el.addEventListener("mouseup",     onEnd);
+    el.addEventListener("contextmenu", e => e.preventDefault());
   }
 
   // ----- Render -----
@@ -176,18 +207,27 @@
       if (!onClick && albumSelectMode) { handleAlbumTileSelect(btn, a); return; }
       (onClick || (() => openAlbum(a)))();
     });
+    if (!onClick) {
+      addLongPress(btn, () => {
+        if (!albumSelectMode) enterAlbumSelectMode();
+        handleAlbumTileSelect(btn, a);
+      });
+    }
     return btn;
+  }
+
+  function enterAlbumSelectMode() {
+    albumSelectMode = true;
+    if (selectDoneBtn) selectDoneBtn.classList.remove("hidden");
+    if (albumActionBar) { albumActionBar.classList.remove("hidden"); updateAlbumActionBar(); }
   }
 
   function exitAlbumSelectMode() {
     albumSelectMode = false;
     albumSelected = [];
-    if (albumSelectToggle) {
-      albumSelectToggle.classList.remove("is-active");
-      const sp = albumSelectToggle.querySelector("span"); if (sp) sp.textContent = "Select";
-    }
     if (albumActionBar) albumActionBar.classList.add("hidden");
     grid.querySelectorAll(".album.is-selected").forEach(b => b.classList.remove("is-selected"));
+    if (!labelsActive && selectDoneBtn) selectDoneBtn.classList.add("hidden");
   }
 
   function updateAlbumActionBar() {
@@ -216,12 +256,10 @@
     if (!albums.length) {
       grid.innerHTML = "";
       setBanner("No albums were returned. Is your library indexed?", true);
-      if (albumSelectToggle) albumSelectToggle.classList.add("hidden");
       return;
     }
     setBanner(null);
     renderAlbumGrid(albums);
-    if (albumSelectToggle) albumSelectToggle.classList.remove("hidden");
   }
 
   // ----- Random albums fetch -----
@@ -908,7 +946,6 @@
           if (Array.isArray(list) && list.length && key === filterCacheKey()) {
             setBanner(null);
             renderAlbumGrid(list);
-            if (albumSelectToggle) albumSelectToggle.classList.remove("hidden");
             restored = true;
           }
         }
@@ -984,7 +1021,6 @@
       if (!q) { stopSearch(); return; }                  // emptied: restore wall, keep bar open
       if (window.__exitLabels) window.__exitLabels();    // leave the label browser
       exitAlbumSelectMode();
-      if (albumSelectToggle) albumSelectToggle.classList.add("hidden");
       active = true;
       // Small debounce: long enough to coalesce a fast burst, short enough to
       // still feel instant.
@@ -1159,7 +1195,6 @@
     const labelsBar          = document.getElementById("labels-bar");
     const labelsBack         = document.getElementById("labels-back");
     const labelsTitle        = document.getElementById("labels-title");
-    const labelSelectToggle  = document.getElementById("label-select-toggle");
     const labelMergeBar      = document.getElementById("label-merge-bar");
     const labelMergeInfo     = document.getElementById("label-merge-info");
     const labelMergeBtn      = document.getElementById("label-merge-btn");
@@ -1189,17 +1224,19 @@
       return Number.isFinite(v) && v > 0 ? v : 1;
     }
 
+    function enterLabelSelectMode() {
+      labelsSelectMode = true;
+      if (selectDoneBtn) selectDoneBtn.classList.remove("hidden");
+      if (labelMergeBar) { labelMergeBar.classList.remove("hidden"); updateMergeBar(); }
+    }
+
     function exitLabelSelectMode() {
       labelsSelectMode = false;
       labelsSelected = [];
-      if (labelSelectToggle) {
-        labelSelectToggle.classList.remove("is-active");
-        const sp = labelSelectToggle.querySelector("span");
-        if (sp) sp.textContent = "Select";
-      }
       if (labelMergeBar) labelMergeBar.classList.add("hidden");
       grid.querySelectorAll(".album.label-tile.is-selected,.album.label-tile.is-first-selected")
         .forEach(b => b.classList.remove("is-selected", "is-first-selected"));
+      if (selectDoneBtn) selectDoneBtn.classList.add("hidden");
     }
 
     function updateMergeBar() {
@@ -1288,7 +1325,7 @@
       if (labelsBar) labelsBar.classList.add("hidden");
       exitLabelSelectMode();
       exitAlbumSelectMode();
-      if (labelSelectToggle) labelSelectToggle.classList.add("hidden");
+      updateScanBar(null);
       if (labelUnmergeSheet) labelUnmergeSheet.classList.add("hidden");
     }
     window.__exitLabels = exitLabels;
@@ -1320,7 +1357,7 @@
     }
 
     async function showLabelsList(isRepoll = false) {
-      if (!isRepoll) { exitAlbumSelectMode(); if (albumSelectToggle) albumSelectToggle.classList.add("hidden"); }
+      if (!isRepoll) { exitAlbumSelectMode(); }
       mode = "list";
       labelsActive = true;
       labelsBtn.classList.add("is-active");
@@ -1339,9 +1376,10 @@
           if (!isRepoll) grid.innerHTML = "";
           if (j.scanning) {
             const msg = pct > 0
-              ? "Scanning your library for record labels… " + pct + "% complete."
-              : "Building library index… labels will appear once the scan starts.";
+              ? "Scanning for record labels… " + pct + "% complete."
+              : "Building library index…";
             setBanner(msg, false);
+            updateScanBar(j.scanning ? (j.progress || 0) : null);
             // Re-poll every 4 s while the scan is running
             setTimeout(() => { if (mode === "list") showLabelsList(true); }, 4000);
           } else {
@@ -1366,19 +1404,16 @@
           }
           return;
         }
-        const scanNote = j.scanning ? " (scanning… " + pct + "%)" : "";
-        setCountText(labels.length.toLocaleString() + " labels" + scanNote);
+        setCountText(labels.length.toLocaleString() + " labels");
+        updateScanBar(j.scanning ? (j.progress || 0) : null);
         // Only re-render tiles on first load or when the scan finishes.
         // During an active scan, just update the count text so the grid stays
         // stable — no flash every 5 s as new labels trickle in.
         if (_lastLabelCount <= 0 || !j.scanning) {
           renderLabelTiles(labels);
-          if (labelSelectToggle) labelSelectToggle.classList.remove("hidden");
           const oldLink = grid.querySelector(".scan-log-link");
           if (oldLink) oldLink.remove();
           if (!j.scanning) grid.appendChild(makeScanLogLink());
-        } else {
-          if (labelSelectToggle) labelSelectToggle.classList.remove("hidden");
         }
         // Keep polling while the scan is running
         if (j.scanning) {
@@ -1450,6 +1485,10 @@
           if (labelsSelectMode) handleLabelTileSelect(btn, lb);
           else showLabelAlbums(lb.title);
         });
+        addLongPress(btn, () => {
+          if (!labelsSelectMode) enterLabelSelectMode();
+          handleLabelTileSelect(btn, lb);
+        });
         frag.appendChild(btn);
       }
       grid.appendChild(frag);
@@ -1457,7 +1496,6 @@
 
     async function showLabelAlbums(name) {
       exitAlbumSelectMode();
-      if (albumSelectToggle) albumSelectToggle.classList.add("hidden");
       mode = "albums";
       labelsActive = true;
       labelsBtn.classList.add("is-active");
@@ -1492,18 +1530,7 @@
 
     if (labelsBack) labelsBack.addEventListener("click", () => showLabelsList());
 
-    if (labelSelectToggle) {
-      labelSelectToggle.addEventListener("click", () => {
-        labelsSelectMode = !labelsSelectMode;
-        if (labelsSelectMode) {
-          labelSelectToggle.classList.add("is-active");
-          const sp = labelSelectToggle.querySelector("span"); if (sp) sp.textContent = "Done";
-          if (labelMergeBar) { labelMergeBar.classList.remove("hidden"); updateMergeBar(); }
-        } else {
-          exitLabelSelectMode();
-        }
-      });
-    }
+    window.__exitLabelSelectMode = exitLabelSelectMode;
 
     if (labelMergeBtn) {
       labelMergeBtn.addEventListener("click", async () => {
@@ -1544,16 +1571,12 @@
     if (refreshBtn) refreshBtn.addEventListener("click", exitLabels);
   })();
 
-  // ----- Album multi-select wiring -----
-  if (albumSelectToggle) {
-    albumSelectToggle.addEventListener("click", () => {
-      albumSelectMode = !albumSelectMode;
-      if (albumSelectMode) {
-        albumSelectToggle.classList.add("is-active");
-        const sp = albumSelectToggle.querySelector("span"); if (sp) sp.textContent = "Done";
-        if (albumActionBar) { albumActionBar.classList.remove("hidden"); updateAlbumActionBar(); }
-      } else {
-        exitAlbumSelectMode();
+  // ----- Select done button wiring -----
+  if (selectDoneBtn) {
+    selectDoneBtn.addEventListener("click", () => {
+      if (albumSelectMode) exitAlbumSelectMode();
+      if (labelsActive) {
+        if (window.__exitLabelSelectMode) window.__exitLabelSelectMode();
       }
     });
   }
@@ -2626,6 +2649,32 @@
         }
       }
     } catch (e) {}
+  }
+
+  const forceRescanBtn    = document.getElementById("force-rescan-btn");
+  const forceRescanStatus = document.getElementById("force-rescan-status");
+  if (forceRescanBtn) {
+    forceRescanBtn.addEventListener("click", async () => {
+      if (forceRescanBtn.disabled) return;
+      forceRescanBtn.disabled = true;
+      forceRescanBtn.textContent = "Starting…";
+      if (forceRescanStatus) forceRescanStatus.classList.add("hidden");
+      try {
+        const r = await fetch("/api/labels/rescan-force", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+        forceRescanBtn.textContent = "Rescan started";
+        if (forceRescanStatus) { forceRescanStatus.textContent = "Full rescan started — this may take several minutes. Label data will update as results come in."; forceRescanStatus.classList.remove("hidden"); }
+        setTimeout(() => {
+          forceRescanBtn.disabled = false;
+          forceRescanBtn.textContent = "Force rescan";
+        }, 5000);
+      } catch (e) {
+        forceRescanBtn.disabled = false;
+        forceRescanBtn.textContent = "Force rescan";
+        if (forceRescanStatus) { forceRescanStatus.textContent = "Error: " + e.message; forceRescanStatus.classList.remove("hidden"); }
+      }
+    });
   }
 
   const open = () => { loadRadio(); loadVersion(); overlay.classList.remove("hidden"); };

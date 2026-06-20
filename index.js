@@ -1169,7 +1169,7 @@ function musicDirMounted() {
 
 // Build a map of albumKey → label from audio file tags.
 // Expects Artist/Album/track.flac layout — reads one file per album directory.
-async function buildFileLabelMap() {
+async function buildFileLabelMap(onProgress) {
   const map = new Map();
   if (!musicDirMounted()) return map;
   let mm;
@@ -1190,6 +1190,7 @@ async function buildFileLabelMap() {
   // Match is keyed on tag values (common.album + common.albumartist) so
   // directory naming convention (Artist/Album vs flat Artist - Album) doesn't matter.
   const MAX_DEPTH = 3;
+  let _fsProcessed = 0;
   async function scanDir(dirPath, depth) {
     if (depth > MAX_DEPTH) return;
     let entries;
@@ -1197,6 +1198,8 @@ async function buildFileLabelMap() {
 
     const audioFile = entries.find(e => e.isFile() && AUDIO_RE.test(e.name));
     if (audioFile) {
+      _fsProcessed++;
+      if (onProgress && _fsProcessed % 50 === 0) onProgress(_fsProcessed);
       try {
         const meta = await parseFile(path.join(dirPath, audioFile.name), { duration: false, skipCovers: true });
         const label = (meta.common.label && meta.common.label[0]) || meta.common.organization || null;
@@ -1300,7 +1303,14 @@ async function runLabelsIndexScan() {
   // Pass 0: File metadata — most authoritative source, beats all API results.
   // Also sweeps the existing cache: if a file tag disagrees with a cached value,
   // the file wins and the cache entry is updated in-place.
-  const fileLabelMap = await buildFileLabelMap();
+  // Only run the file scan when there's a meaningful number of uncached albums.
+  // For small batches (new additions), API scan is faster.
+  const estimate = albumIndex.albums.length || 1000;
+  const fileLabelMap = (musicDirMounted() && toScan.length > 10)
+    ? await buildFileLabelMap((n) => {
+        labelsIndex.progress = Math.min(0.15, n / estimate);
+      })
+    : new Map();
   if (fileLabelMap.size) {
     let overrideCount = 0;
     for (const [key, fileLabel] of fileLabelMap) {
@@ -2538,6 +2548,25 @@ app.post("/api/labels/rescan", (req, res) => {
     const msg = "[labels] rescan error: " + e.message;
     if (DEBUG) console.error(msg);
     appendLabelsLog(msg);
+  });
+  res.json({ ok: true });
+});
+
+// Force a FULL rescan — wipes label name cache so ALL albums are re-queried
+// from sources. Logo, MBID and merge data are preserved.
+app.post("/api/labels/rescan-force", (req, res) => {
+  if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
+  if (labelsIndex.building) return res.json({ ok: false, reason: "scan already running" });
+  // Clear label name cache only (logos and MBIDs are expensive to re-fetch)
+  if (labelsDb) labelsDb.prepare("DELETE FROM label_names").run();
+  labelDiskCache.clear();
+  labelsIndex.map.clear();
+  labelsIndex.count = 0;
+  labelsIndex.builtAt = 0;
+  appendLabelsLog("[labels] FORCE rescan requested — cleared name cache, starting full scan");
+  runLabelsIndexScan().catch(e => {
+    const msg = "[labels] force-rescan error: " + e.message;
+    console.error(msg); appendLabelsLog(msg);
   });
   res.json({ ok: true });
 });

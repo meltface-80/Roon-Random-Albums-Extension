@@ -100,9 +100,26 @@ button { font-family: inherit; }
   white-space: nowrap;
   min-width: 0;
   flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(50vw);
 }
 [data-theme="light"] .album-count { color: #000000; }
 .album-count.hidden { display: none; }
+
+.scan-progress-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--border);
+}
+.scan-progress-bar.hidden { display: none; }
+.scan-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width .4s ease;
+  width: 0%;
+}
 
 .topbar-controls {
   display: flex; align-items: center; gap: 8px;
@@ -1755,7 +1772,7 @@ main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 /*  Label select / merge UI                                            */
 /* ------------------------------------------------------------------ */
 
-/* "Select" button in the topbar — only shown when labels list is active */
+/* "Done" button in topbar — only shown when in select mode (album or label) */
 .label-select-toggle {
   display: inline-flex; align-items: center; gap: 5px;
   height: 38px; padding: 0 12px;
