@@ -32,7 +32,6 @@
   const modalActs   = document.getElementById("modal-actions");
   const modalTracks = document.getElementById("modal-tracks");
 
-  const selectDoneBtn        = document.getElementById("select-done-btn");
   const albumActionBar       = document.getElementById("album-action-bar");
   const albumActionInfo      = document.getElementById("album-action-info");
   const albumPlayNowBtn      = document.getElementById("album-play-now-btn");
@@ -218,7 +217,6 @@
 
   function enterAlbumSelectMode() {
     albumSelectMode = true;
-    if (selectDoneBtn) selectDoneBtn.classList.remove("hidden");
     if (albumActionBar) { albumActionBar.classList.remove("hidden"); updateAlbumActionBar(); }
   }
 
@@ -227,7 +225,6 @@
     albumSelected = [];
     if (albumActionBar) albumActionBar.classList.add("hidden");
     grid.querySelectorAll(".album.is-selected").forEach(b => b.classList.remove("is-selected"));
-    if (!labelsActive && selectDoneBtn) selectDoneBtn.classList.add("hidden");
   }
 
   function updateAlbumActionBar() {
@@ -1226,7 +1223,6 @@
 
     function enterLabelSelectMode() {
       labelsSelectMode = true;
-      if (selectDoneBtn) selectDoneBtn.classList.remove("hidden");
       if (labelMergeBar) { labelMergeBar.classList.remove("hidden"); updateMergeBar(); }
     }
 
@@ -1236,7 +1232,6 @@
       if (labelMergeBar) labelMergeBar.classList.add("hidden");
       grid.querySelectorAll(".album.label-tile.is-selected,.album.label-tile.is-first-selected")
         .forEach(b => b.classList.remove("is-selected", "is-first-selected"));
-      if (selectDoneBtn) selectDoneBtn.classList.add("hidden");
     }
 
     function updateMergeBar() {
@@ -1571,15 +1566,7 @@
     if (refreshBtn) refreshBtn.addEventListener("click", exitLabels);
   })();
 
-  // ----- Select done button wiring -----
-  if (selectDoneBtn) {
-    selectDoneBtn.addEventListener("click", () => {
-      if (albumSelectMode) exitAlbumSelectMode();
-      if (labelsActive) {
-        if (window.__exitLabelSelectMode) window.__exitLabelSelectMode();
-      }
-    });
-  }
+
 
   async function invokeAlbumMulti(kind) {
     if (!albumSelected.length) return;

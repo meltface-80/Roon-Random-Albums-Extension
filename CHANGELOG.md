@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.59] — 2026-06-20
+
+### Fixed
+- **Duplicate exit control in select mode** — removed the "Done" topbar button; the "×" in the action bar already exits select mode, making "Done" redundant.
+
 ## [1.5.58] — 2026-06-20
 
 ### Fixed
