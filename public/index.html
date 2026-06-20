@@ -149,6 +149,24 @@ sudo systemctl disable roon-random-albums</pre>
         <span>All labels</span>
       </button>
       <span id="labels-title" class="labels-title"></span>
+      <button id="labels-logo-btn" class="icon-btn" type="button" aria-label="Set label logo" title="Set logo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <polyline points="21 15 16 10 5 21"/>
+        </svg>
+      </button>
+    </div>
+    <div id="logo-url-sheet" class="logo-url-sheet hidden">
+      <input id="logo-url-input" type="url" class="logo-url-input" placeholder="Paste image URL from Discogs or anywhere…" autocomplete="off">
+      <button id="logo-url-save" class="action-btn primary" type="button">Save</button>
+      <button id="logo-url-cancel" class="icon-btn" type="button" aria-label="Cancel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+      </button>
     </div>
     <div id="content-count" class="content-count hidden"></div>
     <div id="status-banner" class="status-banner hidden"></div>

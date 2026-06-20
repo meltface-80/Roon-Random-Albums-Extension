@@ -440,8 +440,21 @@ main {
 .labels-back:active { transform: scale(.97); }
 .labels-title {
   font-size: 15px; font-weight: 600; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0; flex: 1;
 }
+.logo-url-sheet {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0 14px;
+}
+.logo-url-sheet.hidden { display: none; }
+.logo-url-input {
+  flex: 1; min-width: 0;
+  background: var(--bg-elev-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px;
+  color: var(--text); font-size: 14px; font-family: inherit;
+}
+.logo-url-input:focus { outline: none; border-color: var(--accent); }
 .album-meta { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .album-title {
   font-size: 14px; font-weight: 500; color: var(--text); line-height: 1.3;

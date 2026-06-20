@@ -1211,7 +1211,14 @@
     const labelUnmergeName   = document.getElementById("label-unmerge-name");
     const labelUnmergeList   = document.getElementById("label-unmerge-list");
     const labelUnmergeClose  = document.getElementById("label-unmerge-close");
+    const labelsLogoBtn      = document.getElementById("labels-logo-btn");
+    const logoUrlSheet       = document.getElementById("logo-url-sheet");
+    const logoUrlInput       = document.getElementById("logo-url-input");
+    const logoUrlSave        = document.getElementById("logo-url-save");
+    const logoUrlCancel      = document.getElementById("logo-url-cancel");
     if (!labelsBtn) return;
+
+    let currentLabelName = null;
 
     const TAG_SVG =
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" ' +
@@ -1329,6 +1336,7 @@
       _lastLabelCount = -1;
       labelsBtn.classList.remove("is-active");
       if (labelsBar) labelsBar.classList.add("hidden");
+      closeLabelLogoSheet();
       exitLabelSelectMode();
       exitAlbumSelectMode();
       updateScanBar(null);
@@ -1336,6 +1344,44 @@
     }
     window.__exitLabels       = exitLabels;
     window.__showLabelAlbums  = showLabelAlbums;
+
+    // ----- Manual logo URL sheet -----
+    if (labelsLogoBtn) {
+      labelsLogoBtn.addEventListener("click", () => {
+        if (!logoUrlSheet) return;
+        const opening = logoUrlSheet.classList.contains("hidden");
+        logoUrlSheet.classList.toggle("hidden");
+        if (opening && logoUrlInput) logoUrlInput.focus();
+      });
+    }
+    if (logoUrlCancel) {
+      logoUrlCancel.addEventListener("click", closeLabelLogoSheet);
+    }
+    if (logoUrlSave) {
+      logoUrlSave.addEventListener("click", async () => {
+        const url = logoUrlInput ? logoUrlInput.value.trim() : "";
+        if (!url || !currentLabelName) return;
+        logoUrlSave.disabled = true;
+        try {
+          const r = await fetch("/api/labels/logo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ label: currentLabelName, url })
+          });
+          const j = await r.json();
+          if (j.ok) {
+            closeLabelLogoSheet();
+            showToast("Logo saved — reload the labels page to see it", "ok");
+          } else {
+            showToast(j.error || "Failed to save logo", "error");
+          }
+        } catch (e) {
+          showToast("Failed: " + e.message, "error");
+        } finally {
+          logoUrlSave.disabled = false;
+        }
+      });
+    }
 
     function makeScanLogLink() {
       const wrap = document.createElement("div");
@@ -1364,7 +1410,7 @@
     }
 
     async function showLabelsList(isRepoll = false) {
-      if (!isRepoll) { exitAlbumSelectMode(); }
+      if (!isRepoll) { exitAlbumSelectMode(); closeLabelLogoSheet(); currentLabelName = null; }
       mode = "list";
       labelsActive = true;
       labelsBtn.classList.add("is-active");
@@ -1501,8 +1547,15 @@
       grid.appendChild(frag);
     }
 
+    function closeLabelLogoSheet() {
+      if (logoUrlSheet) logoUrlSheet.classList.add("hidden");
+      if (logoUrlInput) logoUrlInput.value = "";
+    }
+
     async function showLabelAlbums(name) {
       exitAlbumSelectMode();
+      closeLabelLogoSheet();
+      currentLabelName = name;
       mode = "albums";
       labelsActive = true;
       labelsBtn.classList.add("is-active");

@@ -1485,6 +1485,7 @@ async function runLabelsIndexScan() {
   let discogsErrors = 0;
   let discogsConsec = 0;
   let discogsAborted = false;
+  const discogsPassDeadline = Date.now() + 5 * 60 * 1000; // 5-minute cap
   for (let di = 0; di < needsDiscogs.length; di++) {
     if (discogsAborted) {
       labelsIndex.progress = passProgress(4, needsDiscogs.length, needsDiscogs.length);
@@ -1507,13 +1508,19 @@ async function runLabelsIndexScan() {
       }
     }
     labelsIndex.progress = passProgress(4, di + 1, needsDiscogs.length);
+    if (!discogsAborted && Date.now() > discogsPassDeadline) {
+      discogsAborted = true;
+      const tMsg = "[labels] pass 4 (Discogs): 5-minute time limit reached — aborting, remainder at next scheduled scan";
+      console.log(tMsg);
+      appendLabelsLog(tMsg);
+    }
     if ((di + 1) % 100 === 0) {
       appendLabelsLog("[labels] pass 4 (Discogs): " + (di + 1) + "/" + needsDiscogs.length + " done so far");
     }
   }
   if (needsDiscogs.length) {
     const discogsMsg = "[labels] pass 4 (Discogs): complete" +
-      (discogsAborted ? " (aborted — consecutive errors)" : "") +
+      (discogsAborted ? " (aborted)" : "") +
       (discogsErrors ? ", " + discogsErrors + " errors total" : "");
     if (DEBUG) console.log(discogsMsg);
     appendLabelsLog(discogsMsg);
@@ -2528,7 +2535,9 @@ app.get("/api/label-albums", (req, res) => {
     albums.sort((a, b) =>
       (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }));
   }
-  res.json({ albums, total: albums.length, label: name, order });
+  const gk = labelGroupKey(name);
+  res.json({ albums, total: albums.length, label: name, order,
+             groupKey: gk, logo_url: labelLogoCache.get(gk) || null });
 });
 
 // Labels scan status — lets the UI poll while the background scan runs.
@@ -2575,6 +2584,25 @@ app.post("/api/labels/rescan-force", (req, res) => {
     console.error(msg); appendLabelsLog(msg);
   });
   res.json({ ok: true });
+});
+
+// Manually set (or override) the logo URL for a label tile.
+// Body: { label: displayName, url: imageUrl }
+app.post("/api/labels/logo", (req, res) => {
+  const { label, url } = req.body || {};
+  if (!label) return res.status(400).json({ error: "label required" });
+  if (!url)   return res.status(400).json({ error: "url required" });
+  const groupKey = labelGroupKey(label);
+  if (!groupKey) return res.status(400).json({ error: "invalid label name" });
+  try {
+    setLabelLogo(groupKey, url);
+    const entry = labelsIndex.map.get(groupKey);
+    if (entry) entry.logo_url = url;
+    discogsLogoTried.delete(groupKey); // allow future automatic re-fetch if logo removed
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Merge two or more label tiles into one.

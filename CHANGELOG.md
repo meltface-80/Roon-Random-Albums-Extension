@@ -2,6 +2,14 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.62] — 2026-06-20
+
+### Fixed
+- **Label scan stalls at ~95%** — the Discogs data pass (finding label names for albums not identified by iTunes/TheAudioDB/MusicBrainz) runs at 1 req/sec and was taking many minutes for large libraries after a Force Rescan. Added a 5-minute time cap: the pass aborts cleanly at the limit and any remaining albums are picked up at the next 12-hour auto-rescan.
+
+### Added
+- **Manual logo for label tiles** — a photo icon button appears in the label album header (when viewing a specific label's albums). Tapping it reveals a URL input; paste any direct image URL (e.g. from the Discogs label page) and tap Save. The logo is stored in the database and survives restarts.
+
 ## [1.5.61] — 2026-06-20
 
 ### Fixed
