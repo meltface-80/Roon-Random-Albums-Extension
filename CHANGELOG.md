@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.51] — 2026-06-20
+
+### Fixed
+- **Label fragmentation (Inc. / LLC variants)** — stripping a corporate suffix (e.g. `Inc.`) from `"A&M Records, Inc."` left a trailing comma that blocked the next pass from stripping `"Records"`, producing group key `"amrecords"` instead of `"am"`. Trailing punctuation is now stripped after *each* suffix pass, so `"A&M Records, Inc."` correctly merges with `"A&M Records"` and `"A&M"`.
+
 ## [1.5.50] — 2026-06-20
 
 ### Fixed

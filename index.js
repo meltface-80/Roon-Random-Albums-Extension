@@ -842,8 +842,11 @@ function labelGroupKey(name) {
   let s = name.trim()
     .replace(/[,;:]+$/, "").trim()
     .replace(COUNTRY_REGION_SUFFIX_RE, "").trim()
+    .replace(/[,;:]+$/, "").trim()
     .replace(LABEL_SUFFIX_RE, "").trim()
+    .replace(/[,;:]+$/, "").trim()
     .replace(LABEL_SUFFIX_RE, "").trim()
+    .replace(/[,;:]+$/, "").trim()
     .replace(COUNTRY_REGION_SUFFIX_RE, "").trim();
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -853,8 +856,11 @@ function canonicalLabelName(name) {
   return name.trim()
     .replace(/[,;:]+$/, "").trim()
     .replace(COUNTRY_REGION_SUFFIX_RE, "").trim()
+    .replace(/[,;:]+$/, "").trim()
     .replace(LABEL_SUFFIX_RE, "").trim()
+    .replace(/[,;:]+$/, "").trim()
     .replace(LABEL_SUFFIX_RE, "").trim()
+    .replace(/[,;:]+$/, "").trim()
     .replace(COUNTRY_REGION_SUFFIX_RE, "").trim();
 }
 
