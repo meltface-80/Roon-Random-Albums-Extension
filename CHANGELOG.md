@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.49] — 2026-06-20
+
+### Added
+- **Discogs label logos** — after Fan Art TV finishes (which requires a MusicBrainz MBID), a second logo pass now searches Discogs by label name and fetches `cover_image` URLs. This covers the large number of labels that have no MBID and therefore no Fan Art TV logo. Results are cached in SQLite alongside Fan Art TV logos. Placeholder/spacer images are filtered out. Runs in the background after every scan and on startup.
+
 ## [1.5.48] — 2026-06-20
 
 ### Changed

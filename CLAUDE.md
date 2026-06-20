@@ -97,3 +97,4 @@ docker run -d \
 | v1.5.46 | pre-release | Label text size by longest word not word count |
 | v1.5.47 | pre-release | Consistent label text size via container query (8cqw) |
 | v1.5.48 | pre-release | Label text size increased to 9cqw |
+| v1.5.49 | pre-release | Discogs label logo fetches |

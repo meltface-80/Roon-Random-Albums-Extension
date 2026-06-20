@@ -922,7 +922,9 @@ function seedLabelsFromCache() {
   labelsIndex.count = labelsIndex.map.size;
   if (DEBUG) console.log("[labels] seeded:", labelsIndex.count, "labels");
   // Kick off logo fetches for any labels already in the mbid cache.
-  kickFanArtFetches().catch(e => { if (DEBUG) console.error("[labels] fanart error:", e.message); });
+  kickFanArtFetches()
+    .then(() => kickDiscogsLogoFetches())
+    .catch(e => { if (DEBUG) console.error("[labels] logo fetch error:", e.message); });
 }
 
 // ---------------------------------------------------------------------------
@@ -1020,6 +1022,7 @@ async function fetchLabelMbidFromMusicBrainz(labelName) {
 const DISCOGS_KEY    = "KFbYgRaYdpnKkHBRB0lV";
 const DISCOGS_SECRET = "UzDPIrwYxEZkIRtvncPoOYovwvvKHQHf";
 let discogsLastReq = 0;
+const discogsLogoTried = new Set(); // per-session dedup — resets on container restart
 
 async function discogsWait() {
   const elapsed = Date.now() - discogsLastReq;
@@ -1443,7 +1446,9 @@ async function runLabelsIndexScan() {
   const doneMsg = "[labels] scan complete: " + labelsIndex.count + " labels found";
   console.log(doneMsg);
   appendLabelsLog(doneMsg);
-  kickFanArtFetches().catch(e => { if (DEBUG) console.error("[labels] fanart error:", e.message); });
+  kickFanArtFetches()
+    .then(() => kickDiscogsLogoFetches())
+    .catch(e => { if (DEBUG) console.error("[labels] logo fetch error:", e.message); });
 }
 
 // ---------------------------------------------------------------------------
@@ -1502,6 +1507,64 @@ async function kickFanArtFetches() {
       pending.slice(i, i + BATCH).map(({ groupKey, mbid }) => fetchFanArtLogo(groupKey, mbid))
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Discogs label logo fetches — runs after Fan Art TV, covers labels that have
+// no MBID (Fan Art TV requires one). Searches Discogs by label name and grabs
+// cover_image. Per-session Set prevents re-fetching within one uptime cycle.
+// ---------------------------------------------------------------------------
+async function fetchLogoFromDiscogs(labelName) {
+  await discogsWait();
+  const url = `https://api.discogs.com/database/search?type=label&q=${encodeURIComponent(labelName)}&per_page=5&key=${DISCOGS_KEY}&secret=${DISCOGS_SECRET}`;
+  try {
+    const json = await httpJson(url, { "User-Agent": MB_USER_AGENT }, 10000);
+    const results = json && json.results;
+    if (!Array.isArray(results) || !results.length) return null;
+    const normTarget = labelGroupKey(labelName);
+    let match = results.find(r => labelGroupKey(r.title || "") === normTarget);
+    if (!match) match = results.find(r => labelGroupKey(r.title || "").startsWith(normTarget));
+    if (!match) match = results[0];
+    const img = match.cover_image || match.thumb || null;
+    // Filter placeholder/spacer images
+    if (!img || img.endsWith(".gif") || /no[-_]image|spacer|avatar|default[-_]label/i.test(img)) return null;
+    return img;
+  } catch (e) {
+    if (DEBUG) console.error("[labels:discogs:logo]", e.message);
+    return null;
+  }
+}
+
+async function kickDiscogsLogoFetches() {
+  const pending = [];
+  for (const [groupKey, entry] of labelsIndex.map) {
+    if (discogsLogoTried.has(groupKey)) continue;
+    if (labelLogoCache.get(groupKey)) continue; // already has a valid logo URL
+    if (!entry.display) continue;
+    pending.push({ groupKey, display: entry.display });
+  }
+  if (!pending.length) return;
+  if (DEBUG) console.log("[labels:discogs:logos] fetching logos for", pending.length, "labels");
+  appendLabelsLog("[labels:discogs:logos] fetching logos for " + pending.length + " labels");
+  let found = 0;
+  for (const { groupKey, display } of pending) {
+    discogsLogoTried.add(groupKey);
+    try {
+      const logoUrl = await fetchLogoFromDiscogs(display);
+      if (logoUrl) {
+        setLabelLogo(groupKey, logoUrl);
+        const entry = labelsIndex.map.get(groupKey);
+        if (entry) entry.logo_url = logoUrl;
+        found++;
+        if (DEBUG) console.log("[labels:discogs:logo]", display, "→", logoUrl);
+      }
+    } catch (e) {
+      if (DEBUG) console.error("[labels:discogs:logo]", display, e.message);
+    }
+  }
+  const msg = "[labels:discogs:logos] done: " + found + "/" + pending.length + " logos found";
+  if (DEBUG) console.log(msg);
+  appendLabelsLog(msg);
 }
 
 async function mbWait() {
