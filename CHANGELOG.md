@@ -2,9 +2,15 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.68] — 2026-06-20
+
+### Fixed
+- **Extension not appearing in Roon (properly fixed)** — the v1.5.67 commit did not actually include the temporal dead zone fix due to a staging sequencing error; the crash was still present. This build correctly declares `let discogsToken` and `let fanartKey` at the load site and removes the duplicate `let` declarations that appeared later in the file.
+
 ## [1.5.67] — 2026-06-20
 
 ### Fixed
+- **Extension not appearing in Roon** — v1.5.66 introduced a JavaScript temporal dead zone crash: `discogsToken` and `fanartKey` were assigned at startup (line ~672) but their `let` declarations appeared hundreds of lines later. Node.js throws a `ReferenceError` before the process can register with Roon. Fixed by declaring both variables at the point they are first assigned.
 - **Discogs API calls broken** — all Discogs auth headers referenced `DISCOGS_TOKEN` (an undefined constant) instead of the `discogsToken` variable loaded from settings. Every API call was sending `Authorization: Discogs token=undefined`, causing silent auth failures. Fixed to use the correct variable name throughout.
 
 ### Changed

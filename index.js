@@ -670,8 +670,8 @@ function savePersistedSettings(patch) {
 
 // Load persisted API keys (set via web UI settings).
 const _persisted = loadPersistedSettings();
-discogsToken = _persisted.discogsToken || "";
-fanartKey    = _persisted.fanartKey    || "";
+let discogsToken = _persisted.discogsToken || "";
+let fanartKey    = _persisted.fanartKey    || "";
 
 // In-memory Maps — primary lookup path.
 const labelDiskCache = new Map();  // album key → label name
@@ -839,8 +839,6 @@ openLabelsDb();
 
 // ---------------------------------------------------------------------------
 // Fan Art TV — label logo images. Free API key — set via web UI settings.
-// ---------------------------------------------------------------------------
-let fanartKey = "";
 
 const labelsIndex = {
   map:      new Map(),   // groupKey → { display, image_key, albums: [{offset,title,subtitle,image_key}] }
@@ -1093,7 +1091,6 @@ async function fetchLabelMbidFromMusicBrainz(labelName) {
 // Discogs — personal access token auth (60 req/min vs 25 for key/secret).
 // Stored in settings.json, configurable via the web UI settings panel.
 // ---------------------------------------------------------------------------
-let discogsToken = "";
 let discogsLastReq = 0;
 const discogsLogoTried = new Set(); // per-session dedup — resets on container restart
 
