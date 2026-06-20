@@ -58,7 +58,7 @@
   try {
     const f = JSON.parse(localStorage.getItem("rra-filter") || "null");
     if (f && f.type && f.value) activeFilter = f;
-  } catch (e) {}
+  } catch (e) {} // corrupt localStorage entry — start with no filter
   function filterQSOf(f) {
     if (!f) return "";
     return "&filter_type=" + encodeURIComponent(f.type) +
@@ -319,7 +319,7 @@
       try {
         sessionStorage.setItem("rra-albums",
           JSON.stringify({ filter: filterCacheKey(), list: j.albums || [] }));
-      } catch (e) {}
+      } catch (e) {} // sessionStorage may be unavailable (private browsing quota) — cache is optional
       updateCountReadout(j.filtered ? j.total : null);
     } catch (e) {
       setBanner(`Couldn't load albums: ${e.message}`, true);
@@ -711,7 +711,7 @@
     document.body.style.overflow = "";
     currentAlbum = null;
     window.__currentAlbum = null;
-    try { sessionStorage.removeItem("rra-modal"); } catch (e) {}
+    try { sessionStorage.removeItem("rra-modal"); } catch (e) {} // sessionStorage optional
     if (typeof window.__refreshTransport === "function") window.__refreshTransport();
   }
   modal.addEventListener("click", (e) => {
@@ -957,7 +957,7 @@
             restored = true;
           }
         }
-      } catch (e) {}
+      } catch (e) {} // corrupt sessionStorage cache — fallback to loadRandom() below
       if (!restored) loadRandom();
     }
 
@@ -1104,8 +1104,8 @@
       try {
         if (f) localStorage.setItem("rra-filter", JSON.stringify(f));
         else   localStorage.removeItem("rra-filter");
-      } catch (e) {}
-      try { sessionStorage.removeItem("rra-albums"); } catch (e) {}
+      } catch (e) {} // localStorage optional (private browsing)
+      try { sessionStorage.removeItem("rra-albums"); } catch (e) {} // sessionStorage optional
       if (window.__exitLabels) window.__exitLabels();
       markActive();
       close();
@@ -1220,6 +1220,7 @@
     if (!labelsBtn) return;
 
     let currentLabelName = null;
+    let currentLabelLogoUrl = null; // set when showLabelAlbums loads — used by logo picker
 
     const TAG_SVG =
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" ' +
@@ -1374,6 +1375,7 @@
       try {
         const r = await fetch("/api/labels/logo-candidates?label=" + encodeURIComponent(labelName));
         const j = await r.json();
+        if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
         const candidates = (j && j.candidates) || [];
         logoCandidatesEl.innerHTML = "";
         if (!candidates.length) {
@@ -1394,8 +1396,8 @@
           btn.addEventListener("click", () => saveLogo(c.img));
           logoCandidatesEl.appendChild(btn);
         }
-      } catch (_) {
-        logoCandidatesEl.innerHTML = '<span class="logo-candidates-hint">Discogs search failed</span>';
+      } catch (e) {
+        logoCandidatesEl.innerHTML = '<span class="logo-candidates-hint">' + (e.message || "Discogs search failed") + '</span>';
       }
     }
 
@@ -1453,7 +1455,7 @@
     }
 
     async function showLabelsList(isRepoll = false) {
-      if (!isRepoll) { exitAlbumSelectMode(); closeLabelLogoSheet(); currentLabelName = null; }
+      if (!isRepoll) { exitAlbumSelectMode(); closeLabelLogoSheet(); currentLabelName = null; currentLabelLogoUrl = null; }
       mode = "list";
       labelsActive = true;
       labelsBtn.classList.add("is-active");
@@ -1613,6 +1615,7 @@
                               "&order=" + encodeURIComponent(labelOrder()));
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+        currentLabelLogoUrl = j.logo_url || null; // expose to logo picker
         const albums = j.albums || [];
         if (!albums.length) {
           grid.innerHTML = "";
@@ -1739,7 +1742,7 @@
                 restored = true;
               }
             }
-          } catch (e) {}
+          } catch (e) {} // corrupt sessionStorage — fallback to loadRandom() below
           if (!restored) await loadRandom();
           loadAlbumCount();
 
@@ -1753,12 +1756,12 @@
                                          filter: parsed.filter });
               }
             }
-          } catch (e) {}
+          } catch (e) {} // corrupt sessionStorage modal state — skip restore, open normally
 
           setInterval(loadZones, 15000);
           return;
         }
-      } catch (e) {}
+      } catch (e) {} // /api/status fetch failed — server not ready yet, fall through to "Waiting" banner
       setBanner("Waiting for Roon Core. Open Roon → Settings → Extensions and click Enable on “Random Albums”.");
       await new Promise(r => setTimeout(r, 2000));
     }
@@ -1843,7 +1846,7 @@
             window.__openAlbum(match, { source: "search" }); return;
           }
         }
-      } catch (e) {}
+      } catch (e) {} // sessionStorage/JSON parse error — fall through to "not indexed" toast
       if (window.__showToast) window.__showToast("Album not yet indexed — try again in a moment");
     });
   }
@@ -1877,7 +1880,7 @@
         line1: np.line1 || "", line2: np.line2 || "", line3: np.line3 || "",
         image_key: np.image_key || "", state: zone.state || "stopped"
       }));
-    } catch (e) {}
+    } catch (e) {} // localStorage optional — transport bar persistence is best-effort
   }
 
   function restoreTransportState() {
@@ -1888,7 +1891,7 @@
       const sub = [saved.line2, saved.line3].filter(Boolean).join(" · ");
       artistEl.textContent = sub || "—";
       bar.classList.remove("hidden");
-    } catch (e) {}
+    } catch (e) {} // corrupt localStorage — transport bar stays hidden, no action needed
   }
 
   async function fetchState() {
@@ -2669,7 +2672,7 @@
       const r = await fetch("/api/update/status", { cache: "no-store" });
       const s = await r.json();
       if (s && s.latest) setDismissed(s.latest);
-    } catch (e) {}
+    } catch (e) {} // network error dismissing update — banner stays hidden, safe to ignore
     hide();
   });
 
@@ -2715,7 +2718,7 @@
     try {
       const r = await fetch("/api/radio?zone=" + encodeURIComponent(zoneSelect.value), { cache: "no-store" });
       if (r.ok) { const j = await r.json(); radioToggle.checked = !!j.enabled; }
-    } catch (e) {}
+    } catch (e) {} // network error loading radio state — toggle stays at default, non-critical
   }
   if (radioToggle) {
     radioToggle.addEventListener("change", async () => {
@@ -2725,7 +2728,7 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ zone: zoneSelect.value, enabled: radioToggle.checked })
         });
-      } catch (e) {}
+      } catch (e) {} // network error toggling radio — toggle UI already updated, best-effort
     });
   }
 
@@ -2744,7 +2747,7 @@
           versionLoaded = true;
         }
       }
-    } catch (e) {}
+    } catch (e) {} // network error loading version — settings panel shows without version, non-critical
   }
 
   const forceRescanBtn    = document.getElementById("force-rescan-btn");
@@ -2784,7 +2787,7 @@
       if (discogsTokenStatus) {
         discogsTokenStatus.textContent = j.set ? ("Current: " + j.masked) : "Not set";
       }
-    } catch (_) {}
+    } catch (_) { /* display-only status — if the fetch fails, silence is fine; status just stays stale */ }
   }
 
   if (discogsTokenSave) {
@@ -2825,7 +2828,7 @@
       if (fanartKeyStatus) {
         fanartKeyStatus.textContent = j.set ? ("Current: " + j.masked) : "Not set";
       }
-    } catch (_) {}
+    } catch (_) { /* display-only status — if the fetch fails, silence is fine; status just stays stale */ }
   }
 
   if (fanartKeySave) {

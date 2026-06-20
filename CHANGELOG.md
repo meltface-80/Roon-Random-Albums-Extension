@@ -2,6 +2,19 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.70] — 2026-06-20
+
+### Fixed
+- **Label scan permanently locked after exception** — if `buildFileLabelMap` or any scan pass threw an unhandled exception, `labelsIndex.building` was never reset to `false`, blocking all future auto-rescans and manual rescans for the lifetime of the container. Wrapped the scan body in try/catch with guaranteed reset.
+- **Discogs CDN image fetch storing login-page URL as logo** — when a candidate image URL redirected to a Discogs login page (HTML, not an image), the code fell through to `storedUrl = resp.url` and stored the login page URL as the logo, producing a permanently broken image tile. Now any non-`image/*` response is discarded and the original URL is kept (tile fails gracefully rather than storing a bad URL).
+- **Discogs API calls fired unauthenticated when no token set** — `fetchLabelFromDiscogs`, `fetchLogoFromDiscogs`, and `kickDiscogsLogoFetches` all sent `Authorization: Discogs token=` (empty) when no token was configured. Added early-return guards: calls are skipped entirely when `discogsToken` is empty, saving rate-limit headroom. `/api/labels/logo-candidates` now returns a clear error message "Discogs token not configured — add it in Settings" so the picker UI shows an actionable message instead of "Discogs search failed".
+- **Logo picker showed generic error on auth/server failure** — `loadLogoCandidates` swallowed the error message and always showed "Discogs search failed". Now propagates the server's error text (e.g. "Discogs token not configured").
+
+### Changed
+- **`savePersistedSettings` now uses in-memory cache** — previously every save called `loadPersistedSettings()` (a synchronous `readFileSync`) to merge before writing. Added `_settingsCache` so the file is read once at startup and all subsequent saves update in-place with no disk read. Eliminates the read-before-write pattern on every radio toggle and token save.
+- **All silent `catch` blocks now have comments** — every `catch (e) {}` and `catch (_) {}` in `index.js` and `app.js` has a comment explaining why silence is safe. Required by CLAUDE.md zero-tolerance rules.
+- **`currentLabelLogoUrl` captured from label-albums response** — the `logo_url` field returned by `/api/label-albums` is now stored in a frontend variable, making the current label's stored logo available for future use in the picker UI.
+
 ## [1.5.69] — 2026-06-20
 
 ### Fixed

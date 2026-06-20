@@ -111,10 +111,10 @@ function pushStatus() {
   if (st.apply.phase === "downloading" || st.apply.phase === "extracting") extra = "  \u2022  Updating\u2026";
   else if (st.apply.phase === "restarting") extra = "  \u2022  Restarting to update\u2026";
   else if (st.available) extra = `  \u2022  Update available: v${st.latest} \u2014 install from the web app or this Settings page`;
-  try { svc_status.set_status(_statusPair + extra, _statusPairErr); } catch (e) {}
+  try { svc_status.set_status(_statusPair + extra, _statusPairErr); } catch (e) {} // svc_status may be null before Roon pairs
 }
 async function updateCheckTick() {
-  try { await updater.checkNow(); } catch (e) {}
+  try { await updater.checkNow(); } catch (e) {} // network failure — no status to update, skip silently
   pushStatus();
 }
 
@@ -657,14 +657,22 @@ function appendLabelsLog(message) {
   } catch (e) { /* never throw from log helper */ }
 }
 
+let _settingsCache = null; // in-memory mirror — eliminates read-before-write on every save
 function loadPersistedSettings() {
-  try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8")) || {}; } catch (e) { return {}; }
+  if (_settingsCache) return _settingsCache;
+  try {
+    _settingsCache = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8")) || {};
+  } catch (e) {
+    _settingsCache = {};
+  }
+  return _settingsCache;
 }
 function savePersistedSettings(patch) {
   try {
-    const cur = loadPersistedSettings();
+    const cur = loadPersistedSettings(); // hits cache after first call — no disk read
+    Object.assign(cur, patch);           // mutate in place so cache stays coherent
     fs.mkdirSync(LABELS_DB_DIR, { recursive: true });
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ ...cur, ...patch }, null, 2));
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(cur, null, 2));
     return true;
   } catch (e) {
     console.error("[settings] save failed:", e.message);
@@ -1105,7 +1113,7 @@ async function discogsWait() {
 }
 
 async function fetchLabelFromDiscogs(title, artist) {
-  if (!title) return null;
+  if (!title || !discogsToken) return null;
   await discogsWait();
   const params = new URLSearchParams({ type: "release", release_title: title });
   if (artist) params.set("artist", artist);
@@ -1253,6 +1261,8 @@ async function runLabelsIndexScan() {
   }
   labelsIndex.building = true;
   labelsIndex.progress = 0;
+
+  try {
 
   seedLabelsFromCache();
 
@@ -1547,6 +1557,16 @@ async function runLabelsIndexScan() {
   kickFanArtFetches()
     .then(() => kickDiscogsLogoFetches())
     .catch(e => { if (DEBUG) console.error("[labels] logo fetch error:", e.message); });
+
+  } catch (e) {
+    // Any unexpected exception — always reset so future scans aren't permanently blocked.
+    labelsIndex.building = false;
+    labelsIndex.builtAt = Date.now();
+    saveLastScanTime();
+    const errMsg = "[labels] scan aborted by unexpected error: " + e.message;
+    console.error(errMsg);
+    appendLabelsLog(errMsg);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1613,6 +1633,7 @@ async function kickFanArtFetches() {
 // cover_image. Per-session Set prevents re-fetching within one uptime cycle.
 // ---------------------------------------------------------------------------
 async function fetchLogoFromDiscogs(labelName) {
+  if (!discogsToken) return { logo: null, reason: "no-token" };
   await discogsWait();
   // Strip leading non-alphanumeric characters before searching — Discogs uses
   // Elasticsearch where ~ is a fuzzy operator, so "~scape" is misinterpreted.
@@ -1642,6 +1663,7 @@ async function fetchLogoFromDiscogs(labelName) {
 }
 
 async function kickDiscogsLogoFetches() {
+  if (!discogsToken) return;
   const pending = [];
   for (const [groupKey, entry] of labelsIndex.map) {
     if (discogsLogoTried.has(groupKey)) continue;
@@ -2612,6 +2634,7 @@ app.get("/api/labels/logo-image/:filename", (req, res) => {
 app.get("/api/labels/logo-candidates", async (req, res) => {
   const name = (req.query.label || "").trim();
   if (!name) return res.status(400).json({ error: "label required" });
+  if (!discogsToken) return res.status(400).json({ error: "Discogs token not configured — add it in Settings" });
   const headers = {
     "Authorization": `Discogs token=${discogsToken}`,
     "User-Agent": MB_USER_AGENT
@@ -2687,7 +2710,7 @@ app.post("/api/labels/logo", async (req, res) => {
       const images = Array.isArray(labelData && labelData.images) ? labelData.images : [];
       const img = images.find(i => i.uri && !i.uri.endsWith(".gif") && !BAD.test(i.uri));
       if (img && img.uri) imageUrl = img.uri;
-    } catch (_) {}
+    } catch (_) { /* Discogs API unavailable — fall through to download the CDN URL directly */ }
   }
 
   let storedUrl = imageUrl;
@@ -2707,10 +2730,13 @@ app.post("/api/labels/logo", async (req, res) => {
       fs.mkdirSync(logosDir, { recursive: true });
       fs.writeFileSync(path.join(logosDir, groupKey + "." + ext), Buffer.from(await resp.arrayBuffer()));
       storedUrl = `/api/labels/logo-image/${groupKey}.${ext}`;
-    } else if (resp.url && resp.url !== imageUrl) {
-      storedUrl = resp.url;
+    } else {
+      // Non-image response — could be a Discogs auth redirect (login page HTML).
+      // Do NOT store resp.url: it may be a Discogs login page URL which would render as broken.
+      // Keep storedUrl as the original imageUrl and let the tile fail gracefully.
+      if (DEBUG) console.warn("[labels:logo] unexpected content-type:", ct.slice(0, 40), "for", imageUrl.slice(0, 80));
     }
-  } catch (_) { /* timeout or network error — store URL as-is */ }
+  } catch (_) { /* timeout or network error — storedUrl stays as imageUrl, tile fails gracefully */ }
 
   try {
     setLabelLogo(groupKey, storedUrl);
@@ -2969,16 +2995,16 @@ const radioZones = new Set();
 try {
   const s = loadPersistedSettings();
   if (Array.isArray(s.radioZones)) s.radioZones.forEach(z => radioZones.add(z));
-} catch (e) {}
+} catch (e) {} // corrupt/missing settings.json — start with empty radioZones
 if (!radioZones.size) {
   try {
     const saved = (roon.load_config && roon.load_config("rra_settings")) || {};
     if (Array.isArray(saved.radioZones)) saved.radioZones.forEach(z => radioZones.add(z));
-  } catch (e) {}
+  } catch (e) {} // legacy Roon config may not exist — safe to ignore
 }
 function persistRadio() {
   const zones = [...radioZones];
-  try { roon.save_config && roon.save_config("rra_settings", { radioZones: zones }); } catch (e) {}
+  try { roon.save_config && roon.save_config("rra_settings", { radioZones: zones }); } catch (e) {} // optional Roon config API — savePersistedSettings below is the primary store
   savePersistedSettings({ radioZones: zones });
 }
 const radioBusy = {}; // zone_id -> { active: bool, ts: number }
@@ -3055,7 +3081,7 @@ function scrobbleUpdate(z) {
       // New track — complete previous if it qualifies
       if (prev && prev.playId && prev.elapsed >= 30 &&
           (prev.elapsed >= (prev.duration || 0) * 0.5 || prev.elapsed >= 240)) {
-        try { stmtCompletePlay.run(prev.playId); } catch (e) {}
+        try { stmtCompletePlay.run(prev.playId); } catch (e) {} // scrobble DB optional — playback continues regardless
       }
       // Insert new play record
       let playId = null;
@@ -3066,7 +3092,7 @@ function scrobbleUpdate(z) {
           np.image_key || "", np.length || 0
         );
         playId = info.lastInsertRowid;
-      } catch (e) {}
+      } catch (e) {} // scrobble DB optional — null playId is handled below
       scrobbleState.set(zid, {
         track, artist, album,
         image_key: np.image_key || "", duration: np.length || 0,
@@ -3082,7 +3108,7 @@ function scrobbleUpdate(z) {
     // Not playing (paused/stopped) — finalise if eligible
     if (prev.elapsed >= 30 &&
         (prev.elapsed >= (prev.duration || 0) * 0.5 || prev.elapsed >= 240)) {
-      try { stmtCompletePlay.run(prev.playId); } catch (e) {}
+      try { stmtCompletePlay.run(prev.playId); } catch (e) {} // scrobble DB optional — playback continues regardless
     }
     scrobbleState.delete(zid);
   }
@@ -3107,7 +3133,7 @@ app.post("/api/radio", (req, res) => {
   // React immediately: start if idle, or top up if already on the last track.
   // allowPlay=true because the user explicitly just enabled radio.
   if (enabled && core && zones[zoneId]) {
-    try { handleRadioZone(zones[zoneId], false, true); } catch (e) {}
+    try { handleRadioZone(zones[zoneId], false, true); } catch (e) {} // best-effort kickstart — radio will retry on next zone-state event
   }
 });
 
