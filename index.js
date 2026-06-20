@@ -1596,7 +1596,11 @@ async function kickFanArtFetches() {
 // ---------------------------------------------------------------------------
 async function fetchLogoFromDiscogs(labelName) {
   await discogsWait();
-  const url = `https://api.discogs.com/database/search?type=label&q=${encodeURIComponent(labelName)}&per_page=5`;
+  // Strip leading non-alphanumeric characters before searching — Discogs uses
+  // Elasticsearch where ~ is a fuzzy operator, so "~scape" is misinterpreted.
+  // The original name is still used for result matching via labelGroupKey.
+  const searchTerm = labelName.replace(/^[^a-z0-9]+/i, "").trim() || labelName;
+  const url = `https://api.discogs.com/database/search?type=label&q=${encodeURIComponent(searchTerm)}&per_page=5`;
   try {
     const json = await httpJson(url, {
       "Authorization": `Discogs key=${DISCOGS_KEY}, secret=${DISCOGS_SECRET}`,
@@ -2557,13 +2561,15 @@ app.post("/api/labels/rescan", (req, res) => {
 app.post("/api/labels/rescan-force", (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
   if (labelsIndex.building) return res.json({ ok: false, reason: "scan already running" });
-  // Clear label name cache only (logos and MBIDs are expensive to re-fetch)
+  // Clear label name cache only (logos and MBIDs are expensive to re-fetch).
+  // Also clear the per-session logo dedup Set so Discogs logo fetches are retried.
   if (labelsDb) labelsDb.prepare("DELETE FROM label_names").run();
   labelDiskCache.clear();
   labelsIndex.map.clear();
   labelsIndex.count = 0;
   labelsIndex.builtAt = 0;
-  appendLabelsLog("[labels] FORCE rescan requested — cleared name cache, starting full scan");
+  discogsLogoTried.clear();
+  appendLabelsLog("[labels] FORCE rescan requested — cleared name cache + logo dedup, starting full scan");
   runLabelsIndexScan().catch(e => {
     const msg = "[labels] force-rescan error: " + e.message;
     console.error(msg); appendLabelsLog(msg);

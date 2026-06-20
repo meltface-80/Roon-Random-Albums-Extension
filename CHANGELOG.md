@@ -2,6 +2,12 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.61] — 2026-06-20
+
+### Fixed
+- **Discogs logo search fails for labels with leading symbols** — labels like `~scape`, `(((Belle Sound)))`, or `[PIAS]` were not found because Discogs uses Elasticsearch where `~` is a fuzzy operator. The search query now strips leading non-alphanumeric characters before sending to Discogs; the original name is still used for result matching, so `~scape` searches for `scape` but matches the `~scape` result correctly.
+- **Force rescan skips Discogs logo re-fetch** — the per-session dedup Set (`discogsLogoTried`) was never cleared by Force Rescan, so labels that previously got no logo result would be silently skipped even after the search bug was fixed. Force Rescan now clears the Set so all logo lookups are retried.
+
 ## [1.5.60] — 2026-06-20
 
 ### Added
