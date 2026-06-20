@@ -1085,10 +1085,10 @@ async function fetchLabelMbidFromMusicBrainz(labelName) {
 }
 
 // ---------------------------------------------------------------------------
-// Discogs — label source using key/secret auth (rate limit: 1 req/sec).
+// Discogs — personal access token auth (60 req/min vs 25 for key/secret).
+// Set DISCOGS_TOKEN env var when starting the container.
 // ---------------------------------------------------------------------------
-const DISCOGS_KEY    = "KFbYgRaYdpnKkHBRB0lV";
-const DISCOGS_SECRET = "UzDPIrwYxEZkIRtvncPoOYovwvvKHQHf";
+const DISCOGS_TOKEN = process.env.DISCOGS_TOKEN || "";
 let discogsLastReq = 0;
 const discogsLogoTried = new Set(); // per-session dedup — resets on container restart
 
@@ -1106,7 +1106,7 @@ async function fetchLabelFromDiscogs(title, artist) {
   const url = `https://api.discogs.com/database/search?${params}`;
   try {
     const json = await httpJson(url, {
-      "Authorization": `Discogs key=${DISCOGS_KEY}, secret=${DISCOGS_SECRET}`,
+      "Authorization": `Discogs token=${DISCOGS_TOKEN}`,
       "User-Agent": MB_USER_AGENT
     });
     const results = json && json.results;
@@ -1245,7 +1245,35 @@ async function runLabelsIndexScan() {
     if (albumIndex.building) { try { await albumIndex.building; } catch (e) {} }
     if (albumIndex.count === 0) return;
   }
+  labelsIndex.building = true;
+  labelsIndex.progress = 0;
+
   seedLabelsFromCache();
+
+  // Pass 0: File metadata — runs unconditionally (before the early-return check)
+  // so corrected file tags override stale API-derived cache entries on every scan,
+  // including 12-hour auto-rescans where all albums are already cached.
+  const estimate = albumIndex.albums.length || 1000;
+  const fileLabelMap = musicDirMounted()
+    ? await buildFileLabelMap((n) => {
+        labelsIndex.progress = Math.min(0.15, n / estimate);
+      })
+    : new Map();
+  if (fileLabelMap.size) {
+    let overrideCount = 0;
+    for (const [key, fileLabel] of fileLabelMap) {
+      const cached = labelDiskCache.get(key);
+      if (cached && labelGroupKey(cached) !== labelGroupKey(fileLabel)) {
+        setLabelName(key, fileLabel);
+        overrideCount++;
+      }
+    }
+    if (overrideCount) {
+      rebuildLabelsMap();
+      appendLabelsLog("[labels:files] corrected " + overrideCount + " stale cache entries from file tags");
+      if (DEBUG) console.log("[labels:files] corrected", overrideCount, "stale cache entries from file tags");
+    }
+  }
 
   const toScan = albumIndex.albums.filter(al => {
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
@@ -1253,6 +1281,7 @@ async function runLabelsIndexScan() {
   });
 
   if (!toScan.length) {
+    labelsIndex.building = false;
     labelsIndex.builtAt = Date.now();
     saveLastScanTime();
     const msg = "[labels] scan: all albums already cached (" + labelsIndex.count + " labels)";
@@ -1261,8 +1290,6 @@ async function runLabelsIndexScan() {
     return;
   }
 
-  labelsIndex.building = true;
-  labelsIndex.progress = 0;
   const alreadyDone = albumIndex.albums.length - toScan.length;
   const total = albumIndex.albums.length;
   const scanCount = toScan.length;
@@ -1279,7 +1306,7 @@ async function runLabelsIndexScan() {
     const frac = passTotal > 0 ? pos / passTotal : 1;
     return Math.min(1, basePct + scanPct * (start + (end - start) * frac));
   }
-  let done = 0; // kept for compatibility with file+iTunes pass tracking
+  let done = 0;
 
   const startMsg = "[labels] scan started: " + toScan.length + " albums to look up (" + alreadyDone + " already cached)";
   console.log(startMsg);
@@ -1300,29 +1327,7 @@ async function runLabelsIndexScan() {
     }
   };
 
-  // Pass 0: File metadata — most authoritative source, beats all API results.
-  // Also sweeps the existing cache: if a file tag disagrees with a cached value,
-  // the file wins and the cache entry is updated in-place.
-  // Only run the file scan when there's a meaningful number of uncached albums.
-  // For small batches (new additions), API scan is faster.
-  const estimate = albumIndex.albums.length || 1000;
-  const fileLabelMap = (musicDirMounted() && toScan.length > 10)
-    ? await buildFileLabelMap((n) => {
-        labelsIndex.progress = Math.min(0.15, n / estimate);
-      })
-    : new Map();
-  if (fileLabelMap.size) {
-    let overrideCount = 0;
-    for (const [key, fileLabel] of fileLabelMap) {
-      const cached = labelDiskCache.get(key);
-      if (cached && labelGroupKey(cached) !== labelGroupKey(fileLabel)) {
-        setLabelName(key, fileLabel);
-        overrideCount++;
-      }
-    }
-    if (overrideCount) appendLabelsLog("[labels:files] overrode " + overrideCount + " stale cache entries");
-    if (DEBUG && overrideCount) console.log("[labels:files] overrode", overrideCount, "stale cache entries");
-  }
+  // Fill in file labels for uncached albums using the map already built above.
   const needsApiScan = [];
   for (const al of toScan) {
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
@@ -1610,7 +1615,7 @@ async function fetchLogoFromDiscogs(labelName) {
   const url = `https://api.discogs.com/database/search?type=label&q=${encodeURIComponent(searchTerm)}&per_page=5`;
   try {
     const json = await httpJson(url, {
-      "Authorization": `Discogs key=${DISCOGS_KEY}, secret=${DISCOGS_SECRET}`,
+      "Authorization": `Discogs token=${DISCOGS_TOKEN}`,
       "User-Agent": MB_USER_AGENT
     }, 10000);
     const results = json && json.results;
@@ -2602,7 +2607,7 @@ app.get("/api/labels/logo-candidates", async (req, res) => {
   const name = (req.query.label || "").trim();
   if (!name) return res.status(400).json({ error: "label required" });
   const headers = {
-    "Authorization": `Discogs key=${DISCOGS_KEY}, secret=${DISCOGS_SECRET}`,
+    "Authorization": `Discogs token=${DISCOGS_TOKEN}`,
     "User-Agent": MB_USER_AGENT
   };
   const BAD = /no[-_]image|no[-_]label|spacer|avatar|default[-_]label/i;
@@ -2670,7 +2675,7 @@ app.post("/api/labels/logo", async (req, res) => {
       const BAD = /no[-_]image|no[-_]label|spacer|avatar|default[-_]label/i;
       const labelData = await httpJson(
         `https://api.discogs.com/labels/${discogsIdMatch[1]}`,
-        { "Authorization": `Discogs key=${DISCOGS_KEY}, secret=${DISCOGS_SECRET}`, "User-Agent": MB_USER_AGENT },
+        { "Authorization": `Discogs token=${DISCOGS_TOKEN}`, "User-Agent": MB_USER_AGENT },
         10000
       );
       const images = Array.isArray(labelData && labelData.images) ? labelData.images : [];

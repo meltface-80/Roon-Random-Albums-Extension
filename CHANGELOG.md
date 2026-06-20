@@ -2,6 +2,12 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.65] — 2026-06-20
+
+### Fixed
+- **Albums appearing under wrong labels** — two bugs in the scan pipeline caused stale API-derived label assignments to persist even when file tags had correct data. (1) The file-tag override pass only ran when ≥10 albums were uncached, so 12-hour auto-rescans where everything was already cached never re-read file tags. (2) Even when the override pass did run, it updated the SQLite cache but not the in-memory index, so the labels page still showed the old wrong attribution. File tags (populated by beets/MusicBrainz) now always take priority: the file scan runs unconditionally at the top of every scan, and a `rebuildLabelsMap()` call follows any corrections so the in-memory index matches immediately.
+- **Discogs logo fetch using wrong auth** — all Discogs API calls used consumer key+secret authentication, which behaves like an unauthenticated request (25 req/min) and may be rejected by certain endpoints. Switched to personal access token auth (`Discogs token=…`) which is the method recommended by Discogs and used in working reference implementations.
+
 ## [1.5.64] — 2026-06-20
 
 ### Fixed
