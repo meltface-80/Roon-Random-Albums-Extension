@@ -1230,6 +1230,8 @@
       } catch (e) {
         if (!isRepoll) grid.innerHTML = "";
         setBanner("Couldn't load labels: " + e.message, true);
+        // Retry after 10 s so a transient network error doesn't stop updates permanently.
+        setTimeout(() => { if (mode === "list") showLabelsList(true); }, 10000);
       }
     }
 

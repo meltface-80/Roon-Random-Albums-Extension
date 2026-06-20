@@ -633,7 +633,8 @@ try { Database = require("better-sqlite3"); } catch (e) { Database = null; }
 const LABELS_DB_DIR  = path.join(__dirname, "data", "cache");
 const LABELS_DB_FILE = path.join(LABELS_DB_DIR, "labels.db");
 const SETTINGS_FILE  = path.join(LABELS_DB_DIR, "settings.json");
-const LABELS_LOG_FILE = path.join(__dirname, "data", "labels-scan.log");
+const LABELS_LOG_FILE  = path.join(__dirname, "data", "labels-scan.log");
+const LAST_SCAN_FILE   = path.join(LABELS_DB_DIR, "last-labels-scan.txt");
 const LABELS_LOG_MAX = 100 * 1024; // rotate at ~100KB
 
 function appendLabelsLog(message) {
@@ -827,6 +828,28 @@ const labelsIndex = {
   progress: 0,           // 0..1 while scanning
   building: false
 };
+
+function loadLastScanTime() {
+  try {
+    const raw = fs.readFileSync(LAST_SCAN_FILE, "utf8").trim();
+    const ts = parseInt(raw, 10);
+    if (Number.isFinite(ts) && ts > 0) {
+      labelsIndex.builtAt = ts;
+      if (DEBUG) console.log("[labels] last scan:", new Date(ts).toISOString());
+    }
+  } catch (e) { /* file not present yet */ }
+}
+
+function saveLastScanTime() {
+  try {
+    fs.mkdirSync(LABELS_DB_DIR, { recursive: true });
+    fs.writeFileSync(LAST_SCAN_FILE, String(Date.now()));
+  } catch (e) {
+    if (DEBUG) console.error("[labels] saveLastScanTime:", e.message);
+  }
+}
+
+loadLastScanTime();
 
 // Strip common corporate suffixes so "ACT Music" and "ACT", "Blue Note Records" and
 // "Blue Note" all map to the same group key. Applied twice to catch "XYZ Music Records".
@@ -1191,6 +1214,7 @@ async function runLabelsIndexScan() {
 
   if (!toScan.length) {
     labelsIndex.builtAt = Date.now();
+    saveLastScanTime();
     const msg = "[labels] scan: all albums already cached (" + labelsIndex.count + " labels)";
     if (DEBUG) console.log(msg);
     appendLabelsLog(msg);
@@ -1450,6 +1474,7 @@ async function runLabelsIndexScan() {
 
   labelsIndex.building = false;
   labelsIndex.builtAt  = Date.now();
+  saveLastScanTime();
   labelsIndex.count    = labelsIndex.map.size;
   const doneMsg = "[labels] scan complete: " + labelsIndex.count + " labels found";
   console.log(doneMsg);
@@ -2389,8 +2414,12 @@ app.get("/api/filters/tags", async (req, res) => {
 // Triggers a background scan on first call so the list grows over time.
 app.get("/api/filters/labels", (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
-  // Kick off a scan if one hasn't been done yet.
-  if (!labelsIndex.building && labelsIndex.builtAt === 0) {
+  // Seed from cache so the first response includes labels even on a fresh restart.
+  if (labelsIndex.map.size === 0 && albumIndex.count > 0) {
+    seedLabelsFromCache();
+  }
+  // Kick off a scan if never done, or if the last scan is older than the rescan interval.
+  if (!labelsIndex.building && (labelsIndex.builtAt === 0 || Date.now() - labelsIndex.builtAt > LABELS_RESCAN_MS)) {
     runLabelsIndexScan().catch(e => {
       if (DEBUG) console.error("[labels] scan error:", e.message);
     });

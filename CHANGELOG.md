@@ -2,6 +2,13 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.52] — 2026-06-20
+
+### Fixed
+- **Labels blank during scan** — `/api/filters/labels` now calls `seedLabelsFromCache()` eagerly when the in-memory map is empty but the album index is ready, so the first response on a fresh restart always includes cached labels rather than returning an empty list while the scan runs in the background.
+- **Labels rescan on every restart** — `labelsIndex.builtAt` was in-memory only and reset to 0 on each container restart, triggering a full rescan every time the Labels page was opened. The scan timestamp is now written to `data/cache/last-labels-scan.txt` on completion and reloaded at startup; rescans only trigger when the file is absent or the last scan is older than 12 hours.
+- **Labels polling stops on error** — a single network error in the `showLabelsList` fetch permanently stopped label updates (no retry was scheduled in the catch block). The catch block now retries after 10 seconds so transient errors recover automatically.
+
 ## [1.5.51] — 2026-06-20
 
 ### Fixed
