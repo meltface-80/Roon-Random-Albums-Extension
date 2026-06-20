@@ -49,7 +49,7 @@ Each release ships a `*-docker.tar.gz`. Download it, build the image, and run:
 ```bash
 sudo mkdir -p /opt/roon-random-albums
 cd /opt/roon-random-albums
-wget https://raw.githubusercontent.com/meltface-80/Roon-Random-Albums-Extension/main/roon-random-albums-v1.5.49-docker.tar.gz
+wget https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/v1.5.49/roon-random-albums-v1.5.49-docker.tar.gz
 tar -xzf roon-random-albums-v1.5.49-docker.tar.gz
 docker build -t roon-random-albums:1.5.49 .
 docker run -d \
@@ -100,7 +100,7 @@ sudo systemctl disable roon-random-albums
 # 2. Create the build directory and download the tarball
 sudo mkdir -p /opt/roon-random-albums
 cd /opt/roon-random-albums
-wget https://raw.githubusercontent.com/meltface-80/Roon-Random-Albums-Extension/main/roon-random-albums-v1.5.49-docker.tar.gz
+wget https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/v1.5.49/roon-random-albums-v1.5.49-docker.tar.gz
 tar -xzf roon-random-albums-v1.5.49-docker.tar.gz
 
 # 3. Build the Docker image
