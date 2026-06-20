@@ -32,11 +32,20 @@
   const modalActs   = document.getElementById("modal-actions");
   const modalTracks = document.getElementById("modal-tracks");
 
+  const albumSelectToggle    = document.getElementById("album-select-toggle");
+  const albumActionBar       = document.getElementById("album-action-bar");
+  const albumActionInfo      = document.getElementById("album-action-info");
+  const albumPlayNowBtn      = document.getElementById("album-play-now-btn");
+  const albumQueueBtn        = document.getElementById("album-queue-btn");
+  const albumActionCancelBtn = document.getElementById("album-action-cancel-btn");
+
   let currentAlbum = null;         // {offset,title,subtitle,image_key}
   let zones = [];
   let selectedZoneId = null;
   let albumCount = computeAlbumCount();
   let labelsActive = false;        // viewing the record-label browser?
+  let albumSelectMode = false;
+  let albumSelected = [];          // [{offset,title,subtitle}] albums chosen in select mode
   // The filter that the currently-open album modal belongs to. Usually the
   // active genre/tag filter, but a per-open override is used for label albums
   // so detail + play resolve offsets against the right list.
@@ -163,9 +172,38 @@
 
     btn.appendChild(artWrap);
     btn.appendChild(meta);
-    btn.addEventListener("click", onClick || (() => openAlbum(a)));
+    btn.addEventListener("click", () => {
+      if (!onClick && albumSelectMode) { handleAlbumTileSelect(btn, a); return; }
+      (onClick || (() => openAlbum(a)))();
+    });
     return btn;
   }
+
+  function exitAlbumSelectMode() {
+    albumSelectMode = false;
+    albumSelected = [];
+    if (albumSelectToggle) {
+      albumSelectToggle.classList.remove("is-active");
+      const sp = albumSelectToggle.querySelector("span"); if (sp) sp.textContent = "Select";
+    }
+    if (albumActionBar) albumActionBar.classList.add("hidden");
+    grid.querySelectorAll(".album.is-selected").forEach(b => b.classList.remove("is-selected"));
+  }
+
+  function updateAlbumActionBar() {
+    const n = albumSelected.length;
+    if (albumActionInfo) albumActionInfo.textContent = n === 0 ? "Tap albums to select" : n + " album" + (n === 1 ? "" : "s") + " selected";
+    if (albumPlayNowBtn) albumPlayNowBtn.disabled = n === 0;
+    if (albumQueueBtn)   albumQueueBtn.disabled   = n === 0;
+  }
+
+  function handleAlbumTileSelect(btn, a) {
+    const idx = albumSelected.findIndex(x => x.offset === a.offset);
+    if (idx === -1) { albumSelected.push(a); btn.classList.add("is-selected"); }
+    else            { albumSelected.splice(idx, 1); btn.classList.remove("is-selected"); }
+    updateAlbumActionBar();
+  }
+
   // Builds the album tiles into the grid. Shared by the random wall and search.
   function renderAlbumGrid(albums) {
     grid.innerHTML = "";
@@ -178,10 +216,12 @@
     if (!albums.length) {
       grid.innerHTML = "";
       setBanner("No albums were returned. Is your library indexed?", true);
+      if (albumSelectToggle) albumSelectToggle.classList.add("hidden");
       return;
     }
     setBanner(null);
     renderAlbumGrid(albums);
+    if (albumSelectToggle) albumSelectToggle.classList.remove("hidden");
   }
 
   // ----- Random albums fetch -----
@@ -868,6 +908,7 @@
           if (Array.isArray(list) && list.length && key === filterCacheKey()) {
             setBanner(null);
             renderAlbumGrid(list);
+            if (albumSelectToggle) albumSelectToggle.classList.remove("hidden");
             restored = true;
           }
         }
@@ -942,6 +983,8 @@
       clearTimeout(debounceTimer);
       if (!q) { stopSearch(); return; }                  // emptied: restore wall, keep bar open
       if (window.__exitLabels) window.__exitLabels();    // leave the label browser
+      exitAlbumSelectMode();
+      if (albumSelectToggle) albumSelectToggle.classList.add("hidden");
       active = true;
       // Small debounce: long enough to coalesce a fast burst, short enough to
       // still feel instant.
@@ -1165,19 +1208,19 @@
       while (labelMergeInfo.firstChild) labelMergeInfo.removeChild(labelMergeInfo.firstChild);
       if (n === 0) {
         labelMergeInfo.textContent = "Tap labels to select";
-        labelMergeBtn.querySelector("span").textContent = "Merge";
+        labelMergeBtn.textContent = "Merge";
         labelMergeBtn.disabled = true;
       } else if (n === 1) {
         const s = document.createElement("strong"); s.textContent = labelsSelected[0].display;
         labelMergeInfo.appendChild(s);
         labelMergeInfo.appendChild(document.createTextNode(" — select more to merge"));
-        labelMergeBtn.querySelector("span").textContent = "Merge";
+        labelMergeBtn.textContent = "Merge";
         labelMergeBtn.disabled = true;
       } else {
         labelMergeInfo.appendChild(document.createTextNode("Merge " + n + " into "));
         const s = document.createElement("strong"); s.textContent = labelsSelected[0].display;
         labelMergeInfo.appendChild(s);
-        labelMergeBtn.querySelector("span").textContent = "Merge";
+        labelMergeBtn.textContent = "Merge";
         labelMergeBtn.disabled = false;
       }
     }
@@ -1276,6 +1319,7 @@
     }
 
     async function showLabelsList(isRepoll = false) {
+      if (!isRepoll) { exitAlbumSelectMode(); if (albumSelectToggle) albumSelectToggle.classList.add("hidden"); }
       mode = "list";
       labelsActive = true;
       labelsBtn.classList.add("is-active");
@@ -1411,6 +1455,8 @@
     }
 
     async function showLabelAlbums(name) {
+      exitAlbumSelectMode();
+      if (albumSelectToggle) albumSelectToggle.classList.add("hidden");
       mode = "albums";
       labelsActive = true;
       labelsBtn.classList.add("is-active");
@@ -1496,6 +1542,47 @@
     // Refresh always returns to the random wall.
     if (refreshBtn) refreshBtn.addEventListener("click", exitLabels);
   })();
+
+  // ----- Album multi-select wiring -----
+  if (albumSelectToggle) {
+    albumSelectToggle.addEventListener("click", () => {
+      albumSelectMode = !albumSelectMode;
+      if (albumSelectMode) {
+        albumSelectToggle.classList.add("is-active");
+        const sp = albumSelectToggle.querySelector("span"); if (sp) sp.textContent = "Done";
+        if (albumActionBar) { albumActionBar.classList.remove("hidden"); updateAlbumActionBar(); }
+      } else {
+        exitAlbumSelectMode();
+      }
+    });
+  }
+
+  async function invokeAlbumMulti(kind) {
+    if (!albumSelected.length) return;
+    if (!selectedZoneId) { showToast("Pick a zone first", "error"); return; }
+    if (albumPlayNowBtn) albumPlayNowBtn.disabled = true;
+    if (albumQueueBtn)   albumQueueBtn.disabled   = true;
+    try {
+      const r = await fetch("/api/play-multi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offsets: albumSelected.map(a => a.offset), zone_or_output_id: selectedZoneId, kind })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      const n = albumSelected.length;
+      const verb = kind === "play_now" ? "Playing" : "Queued";
+      showToast(verb + " " + n + " album" + (n === 1 ? "" : "s") + " → " + zoneName(selectedZoneId));
+      exitAlbumSelectMode();
+    } catch (e) {
+      showToast(e.message, "error");
+      updateAlbumActionBar();
+    }
+  }
+
+  if (albumPlayNowBtn)      albumPlayNowBtn.addEventListener("click",      () => invokeAlbumMulti("play_now"));
+  if (albumQueueBtn)        albumQueueBtn.addEventListener("click",        () => invokeAlbumMulti("queue"));
+  if (albumActionCancelBtn) albumActionCancelBtn.addEventListener("click", exitAlbumSelectMode);
 
   window.__openAlbum = openAlbum;
   window.__buildAlbumTile = (a) => buildAlbumTile(a);

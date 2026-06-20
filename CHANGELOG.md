@@ -2,6 +2,14 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.56] — 2026-06-20
+
+### Fixed
+- **Labels merge button invisible on mobile** — the Merge button used the `primary-btn` class whose CSS hides `<span>` text on small screens, making it appear as an empty blue square. Replaced with a new `action-btn primary` style that always shows the button label.
+
+### Added
+- **Album multi-select on the random wall** — a Select button appears in the topbar when on the album wall. Tap to enter select mode, tap tiles to choose albums, then use the action bar (Play Now / Queue) to play them all. Play Now starts the first album and queues the rest; Queue adds all to the queue. Cancel clears the selection.
+
 ## [1.5.55] — 2026-06-20
 
 ### Changed

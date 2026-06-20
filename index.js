@@ -3014,6 +3014,25 @@ app.post("/api/play", async (req, res) => {
   }
 });
 
+// Play multiple albums: first uses `kind`, subsequent albums are always queued.
+// body { offsets: [N, ...], zone_or_output_id, kind }
+app.post("/api/play-multi", async (req, res) => {
+  if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
+  const { offsets, zone_or_output_id, kind } = req.body || {};
+  const filter = parseFilter(req.body || {});
+  if (!Array.isArray(offsets) || !offsets.length) return res.status(400).json({ error: "offsets required" });
+  if (!zone_or_output_id) return res.status(400).json({ error: "zone_or_output_id required" });
+  if (!kind)              return res.status(400).json({ error: "kind required" });
+  try {
+    for (let i = 0; i < offsets.length; i++) {
+      await openAlbumByOffset(offsets[i], zone_or_output_id, i === 0 ? kind : "queue", filter);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Mini-transport: live now-playing for a zone + playback / volume control
 // ---------------------------------------------------------------------------

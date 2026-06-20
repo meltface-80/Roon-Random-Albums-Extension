@@ -1824,6 +1824,7 @@ main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 }
 .label-merge-info strong { color: var(--text); }
 .label-merge-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.label-merge-actions .action-btn { flex: none; height: 38px; padding: 0 16px; }
 
 /* Unmerge bottom sheet */
 .label-unmerge-sheet {

@@ -30,6 +30,15 @@
     <div class="topbar-row">
       <span id="album-count" class="album-count hidden" aria-live="polite"></span>
       <div class="topbar-controls">
+        <button id="album-select-toggle" class="label-select-toggle hidden" type="button" aria-label="Select albums" title="Select">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="3"/>
+            <polyline points="9 12 11 14 15 10"/>
+          </svg>
+          <span>Select</span>
+        </button>
+
         <button id="label-select-toggle" class="label-select-toggle hidden" type="button" aria-label="Select labels to merge" title="Select">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -164,8 +173,23 @@ sudo systemctl disable roon-random-albums</pre>
   <div id="label-merge-bar" class="label-merge-bar hidden" role="toolbar" aria-label="Label merge">
     <span id="label-merge-info" class="label-merge-info"></span>
     <div class="label-merge-actions">
-      <button id="label-merge-btn" class="primary-btn" type="button" disabled><span>Merge</span></button>
+      <button id="label-merge-btn" class="action-btn primary" type="button" disabled>Merge</button>
       <button id="label-merge-cancel-btn" class="icon-btn" type="button" aria-label="Cancel selection">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Album multi-select action bar: Play Now / Queue selected albums -->
+  <div id="album-action-bar" class="label-merge-bar hidden" role="toolbar" aria-label="Album actions">
+    <span id="album-action-info" class="label-merge-info"></span>
+    <div class="label-merge-actions">
+      <button id="album-play-now-btn" class="action-btn primary" type="button" disabled>Play Now</button>
+      <button id="album-queue-btn" class="action-btn" type="button" disabled>Queue</button>
+      <button id="album-action-cancel-btn" class="icon-btn" type="button" aria-label="Cancel selection">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M18 6 6 18M6 6l12 12"/>
