@@ -4,7 +4,7 @@
 
 </div>
 
-# Random Albums + Labels — a Roon extension
+# Random Albums + Labels — a Roon extension v1.5.74
 
 A web UI that shows a screenful of random albums from your Roon library, with instant whole-library search, playback actions targeting any zone, and more.
 
