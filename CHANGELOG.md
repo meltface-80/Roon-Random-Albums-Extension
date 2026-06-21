@@ -2,6 +2,19 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.72] — 2026-06-21
+
+### Fixed
+- **Qobuz-sourced labels bypassed `isLikelyNotALabel` filter** — both `seedLabelsFromCache` and `rebuildLabelsMap` injected Qobuz labels directly into `labelsIndex` without calling `isLikelyNotALabel`, allowing "Self-Released", "Independent", and similar non-label strings to appear as real label tiles. `fetchQobuz` had the same gap when writing back to `labelDiskCache` and `labelsIndex`. All three paths now call `isLikelyNotALabel` before injecting.
+- **iTunes fetch used a subset filter instead of the authoritative `isLikelyNotALabel`** — `fetchLabelFromiTunes` had an inline `/self.released|independent|self-released/i` guard that missed many values covered by `NON_LABEL_RE` (e.g. "Promo Only", "Not On Label", "White Label"). Replaced with `isLikelyNotALabel(label)` so all iTunes results go through the same shared gate as every other fetch path.
+- **Redundant inline filter in `fetchLabelFromDiscogs`** — after calling `isLikelyNotALabel(label)`, the function also tested `/self.released|independent/i` — a strict subset that could never add a new rejection. Removed the duplicate check.
+- **FanArt TV logo stored under source key after merge** — `fetchFanArtLogo` wrote the logo URL (and the `null` 404 sentinel) directly under `groupKey` without consulting `labelMerges`, so if a merge happened before or during the fetch the logo landed under the merged-away key. After a restart, the canonical target key had no logo entry. Now follows `labelMerges` in both the success and 404 error paths, mirroring the fix already applied to Discogs in v1.5.71.
+- **`discogsLogoTried.add()` fired before the fetch completed** — if the network request threw an error, the groupKey was permanently marked as tried for the session, preventing any retry. Moved `.add()` to after the result arrives; errors (`reason === "error"`) are excluded so they can be retried on the next scan cycle.
+- **`labelMbidCache` did not store null for failed MusicBrainz lookups** — `saveLabelEntry` only called `labelMbidCache.set(gk, mbid)` on success, so every scan cycle re-queried MusicBrainz for labels that returned no MBID. Now caches `null` as a session sentinel on failure; the sentinel is not persisted to DB so failed lookups are retried on restart.
+- **`sanitizeDiscogsSearchTerm` logic duplicated in two places** — the leading/trailing non-alphanumeric strip was inlined in both `fetchLogoFromDiscogs` and the `/api/labels/logo-candidates` endpoint. Extracted into a shared `sanitizeDiscogsSearchTerm()` helper; both call sites now use it.
+- **Logo picker did not pre-fill existing URL when opened** — `currentLabelLogoUrl` was populated correctly (since v1.5.70) but never written to `logoUrlInput.value` when the sheet opened. The URL field was always blank even for labels with a stored logo. Now pre-fills `logoUrlInput.value` with `currentLabelLogoUrl` on open.
+- **CLAUDE.md violation: 9 more silent catches without explanatory comments** — `updater.apply()`, `updater.checkNow()`, `refreshSettings()`, `pickSmartAlbum`, `ensureAlbumIndex`, `startIndexMaintenance`, two `/api/play-unheard` routes (index.js), and `fetchAlbumExtras`, `seek`, `control`, `toggleMute`, `renderBarZoneList`, `initDockerMigration` (app.js) all lacked required explanatory comments. Added comments to all.
+
 ## [1.5.71] — 2026-06-21
 
 ### Fixed

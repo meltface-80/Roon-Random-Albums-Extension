@@ -273,7 +273,7 @@
         libraryAlbumTotal = j.albums;
         updateCountReadout(null);
       }
-    } catch (e) { /* non-fatal */ }
+    } catch (e) { /* non-fatal — album count header stays blank until next refresh */ }
   }
   // Set the header readout text directly (used by the labels browser).
   function setCountText(text) {
@@ -551,7 +551,7 @@
       fetchAlbumDetail(album).catch(err => {
         modalActs.innerHTML = `<div class="modal-error">${escapeHtml(err.message)}</div>`;
       });
-      fetchAlbumExtras(album).catch(() => {});
+      fetchAlbumExtras(album).catch(() => { /* extras are non-critical — modal still opens */ });
     }
   }
 
@@ -1409,7 +1409,10 @@
         logoUrlSheet.classList.toggle("hidden");
         if (opening) {
           loadLogoCandidates(currentLabelName || "");
-          if (logoUrlInput) logoUrlInput.focus();
+          if (logoUrlInput) {
+            if (currentLabelLogoUrl) logoUrlInput.value = currentLabelLogoUrl; // pre-fill existing logo URL
+            logoUrlInput.focus();
+          }
         }
       });
     }
@@ -2053,7 +2056,7 @@
         body: JSON.stringify({ zone_or_output_id: currentZone.zone_id, seconds })
       });
       setTimeout(fetchState, 200);
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* seek is best-effort; fetchState() already scheduled above */ }
   }
 
   async function control(command) {
@@ -2070,7 +2073,7 @@
       }
       // Refresh quickly so the icon updates
       setTimeout(fetchState, 200);
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* transport control is best-effort; fetchState() already scheduled above */ }
   }
 
   async function setVolume(value) {
@@ -2093,7 +2096,7 @@
         body: JSON.stringify({ zone_or_output_id: currentZone.zone_id, mute: !muted })
       });
       setTimeout(fetchState, 150);
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* mute is best-effort; fetchState() already scheduled above */ }
   }
 
   // Wire controls
@@ -2215,7 +2218,7 @@
     try {
       const r = await fetch("/api/zones", { cache: "no-store" });
       if (r.ok) { const j = await r.json(); if (Array.isArray(j.zones)) list = j.zones; }
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* zone list is non-critical; picker shows "No zones available" */ }
     zoneList.innerHTML = "";
     if (!list.length) {
       const empty = document.createElement("div");
@@ -3049,7 +3052,7 @@
   fetch("/api/update/status", { cache: "no-store" })
     .then((r) => r.json())
     .then((s) => { if (!s.is_docker) banner.classList.remove("hidden"); })
-    .catch(() => {});
+    .catch(() => { /* migration banner is non-critical; stays hidden on error */ });
   if (dismiss) {
     dismiss.addEventListener("click", () => {
       localStorage.setItem(DISMISS_KEY, "1");
