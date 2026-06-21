@@ -2,6 +2,16 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.73] — 2026-06-21
+
+### Added
+- **Search now shows Artists, Labels, and Albums** — results are split into three sections. Artists and Labels appear as tappable chips above the album grid; tapping an artist chip opens that artist's albums; tapping a label chip navigates to that label in the Labels browser. Albums section renders as before.
+- **Multi-artist name splitting in album modal** — artist fields containing multiple names separated by ` / `, ` feat.`, ` featuring`, or ` ft.` are split into individual tappable links. Each name navigates to that artist's albums independently. ` & ` is intentionally not split as it is often part of a band name (e.g. "Simon & Garfunkel").
+
+### Fixed
+- **Album modal label now matches the Labels browser** — the label shown in the album subtitle line previously came from Qobuz and could disagree with the label the album is listed under in the Labels browser (which uses the scan pipeline: file tags → iTunes → MusicBrainz). The modal now uses the canonical label from the scan pipeline, so tapping the label always navigates to the correct tile.
+- **Labels browser scroll position lost on back-navigation** — returning from a label's album list always reset the labels grid to the top. The grid now restores its scroll position when you navigate back.
+
 ## [1.5.72] — 2026-06-21
 
 ### Fixed

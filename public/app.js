@@ -490,14 +490,26 @@
   function setModalArtist(subtitle) {
     modalSub.innerHTML = "";
     if (!subtitle) return;
-    const btn = document.createElement("button");
-    btn.className = "modal-artist-link";
-    btn.textContent = subtitle;
-    btn.addEventListener("click", () => {
-      closeModal();
-      window.__showArtistAlbums && window.__showArtistAlbums(subtitle);
+    // Split on common multi-artist separators so each name becomes its own link.
+    // " / " is Roon's standard separator; feat/featuring/ft handle featured artists.
+    // " & " is intentionally NOT split — it is often part of a band name (e.g. "Simon & Garfunkel").
+    const parts = subtitle.split(/ \/ | feat\.? | featuring | ft\.? /i).map(s => s.trim()).filter(Boolean);
+    parts.forEach((part, i) => {
+      if (i > 0) {
+        const sep = document.createElement("span");
+        sep.className = "modal-subtitle-year";
+        sep.textContent = " / ";
+        modalSub.appendChild(sep);
+      }
+      const btn = document.createElement("button");
+      btn.className = "modal-artist-link";
+      btn.textContent = part;
+      btn.addEventListener("click", () => {
+        closeModal();
+        window.__showArtistAlbums && window.__showArtistAlbums(part);
+      });
+      modalSub.appendChild(btn);
     });
-    modalSub.appendChild(btn);
   }
 
   function openAlbum(album, opts) {
@@ -1007,7 +1019,9 @@
         }
 
         const results = j.results || [];
-        if (!results.length) {
+        const labels  = j.labels  || [];
+        const artists = j.artists || [];
+        if (!results.length && !labels.length && !artists.length) {
           grid.innerHTML = "";
           setStatus("");
           setBanner(`No matches for \u201C${q}\u201D.`, false);
@@ -1015,8 +1029,60 @@
         }
         setBanner(null);
         const more = results.length >= 60 ? "+" : "";
-        setStatus(`${results.length}${more} result${results.length === 1 ? "" : "s"}`);
-        renderAlbumGrid(results);
+        const parts = [];
+        if (artists.length) parts.push(`${artists.length} artist${artists.length === 1 ? "" : "s"}`);
+        if (labels.length)  parts.push(`${labels.length} label${labels.length === 1 ? "" : "s"}`);
+        if (results.length) parts.push(`${results.length}${more} album${results.length === 1 ? "" : "s"}`);
+        setStatus(parts.join(", "));
+
+        grid.innerHTML = "";
+        const frag = document.createDocumentFragment();
+
+        // Artists section
+        if (artists.length) {
+          const hdr = document.createElement("div"); hdr.className = "search-section-header"; hdr.textContent = "Artists";
+          frag.appendChild(hdr);
+          const row = document.createElement("div"); row.className = "search-chip-row";
+          for (const ar of artists) {
+            const btn = document.createElement("button"); btn.className = "search-chip";
+            btn.textContent = ar.name;
+            btn.addEventListener("click", () => {
+              stopSearch();
+              window.__showArtistAlbums && window.__showArtistAlbums(ar.name);
+            });
+            row.appendChild(btn);
+          }
+          frag.appendChild(row);
+        }
+
+        // Labels section
+        if (labels.length) {
+          const hdr = document.createElement("div"); hdr.className = "search-section-header"; hdr.textContent = "Labels";
+          frag.appendChild(hdr);
+          const row = document.createElement("div"); row.className = "search-chip-row";
+          for (const lb of labels) {
+            const btn = document.createElement("button"); btn.className = "search-chip";
+            btn.textContent = lb.display;
+            btn.addEventListener("click", () => {
+              stopSearch();
+              if (window.__exitLabels) window.__exitLabels();
+              if (window.__showLabelAlbums) window.__showLabelAlbums(lb.display);
+            });
+            row.appendChild(btn);
+          }
+          frag.appendChild(row);
+        }
+
+        // Albums section
+        if (results.length) {
+          if (artists.length || labels.length) {
+            const hdr = document.createElement("div"); hdr.className = "search-section-header"; hdr.textContent = "Albums";
+            frag.appendChild(hdr);
+          }
+          for (const a of results) frag.appendChild(buildAlbumTile(a));
+        }
+
+        grid.appendChild(frag);
       } catch (e) {
         if (e && e.name === "AbortError") return;        // expected when typing fast
         if (mySeq === seq) setStatus("search error");
@@ -1221,6 +1287,8 @@
 
     let currentLabelName = null;
     let currentLabelLogoUrl = null; // set when showLabelAlbums loads — used by logo picker
+    let _labelsScrollSaved = 0;    // restores position when returning from a label's album view
+    const mainEl = document.querySelector("main");
 
     const TAG_SVG =
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" ' +
@@ -1460,6 +1528,7 @@
 
     async function showLabelsList(isRepoll = false) {
       if (!isRepoll) { exitAlbumSelectMode(); closeLabelLogoSheet(); currentLabelName = null; currentLabelLogoUrl = null; }
+      const restoreScroll = !isRepoll && _labelsScrollSaved > 0;
       mode = "list";
       labelsActive = true;
       labelsBtn.classList.add("is-active");
@@ -1516,6 +1585,9 @@
           const oldLink = grid.querySelector(".scan-log-link");
           if (oldLink) oldLink.remove();
           if (!j.scanning) grid.appendChild(makeScanLogLink());
+          if (restoreScroll && mainEl) {
+            requestAnimationFrame(() => { mainEl.scrollTop = _labelsScrollSaved; _labelsScrollSaved = 0; });
+          }
         }
         // Keep polling while the scan is running
         if (j.scanning) {
@@ -1603,6 +1675,7 @@
     }
 
     async function showLabelAlbums(name) {
+      _labelsScrollSaved = mainEl ? mainEl.scrollTop : 0;
       exitAlbumSelectMode();
       closeLabelLogoSheet();
       currentLabelName = name;

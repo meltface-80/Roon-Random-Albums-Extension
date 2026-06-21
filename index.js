@@ -2365,6 +2365,50 @@ function scoreAlbum(al, q, qTokens, qJoined, singleChar) {
   return s;
 }
 
+function searchLabels(q) {
+  if (!q || !labelsIndex.map.size) return [];
+  const out = [];
+  for (const [, entry] of labelsIndex.map) {
+    if (!entry.display) continue;
+    const norm = normalize(entry.display);
+    if (!norm.includes(q)) continue;
+    out.push({
+      display:    entry.display,
+      albumCount: entry.albums ? entry.albums.length : 0,
+      logo_url:   entry.logo_url || null
+    });
+  }
+  out.sort((a, b) => {
+    const aq = normalize(a.display).startsWith(q) ? 0 : 1;
+    const bq = normalize(b.display).startsWith(q) ? 0 : 1;
+    return aq - bq || b.albumCount - a.albumCount;
+  });
+  return out.slice(0, 10);
+}
+
+function searchArtists(q) {
+  if (!q || !albumIndex.albums.length) return [];
+  const seen = new Map(); // normalised name → { name, count }
+  for (const al of albumIndex.albums) {
+    if (!al.subtitle) continue;
+    // Split on common multi-artist separators so each name is matched individually.
+    const names = al.subtitle.split(/ \/ | feat\.? | featuring | ft\.? /i).map(n => n.trim()).filter(Boolean);
+    for (const name of names) {
+      const n = normalize(name);
+      if (!n.includes(q)) continue;
+      if (seen.has(n)) seen.get(n).count++;
+      else seen.set(n, { name, count: 1 });
+    }
+  }
+  return [...seen.values()]
+    .sort((a, b) => {
+      const aq = normalize(a.name).startsWith(q) ? 0 : 1;
+      const bq = normalize(b.name).startsWith(q) ? 0 : 1;
+      return aq - bq || b.count - a.count;
+    })
+    .slice(0, 8);
+}
+
 function searchAlbums(query, limit) {
   const q = normalize(query);
   if (!q) return [];
@@ -2949,8 +2993,11 @@ app.get("/api/search", async (req, res) => {
     if (albumIndex.count === 0 && albumIndex.building) {
       return res.json({ query: q, results: [], building: true, progress: albumIndex.progress });
     }
+    const nq      = normalize(q);
     const results = searchAlbums(q, limit);
-    res.json({ query: q, count: results.length, indexed: albumIndex.count, results });
+    const labels  = searchLabels(nq);
+    const artists = searchArtists(nq);
+    res.json({ query: q, count: results.length, indexed: albumIndex.count, results, labels, artists });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3162,6 +3209,15 @@ app.get("/api/album/extras", async (req, res) => {
     // Prefer MusicBrainz's first-release year (the album's original release)
     // over Qobuz's edition date, which can be a later reissue.
     if (bios && bios.album && year) bios.album.year = year;
+    // Use the canonical label from the scan pipeline so the album modal and the
+    // labels browser always agree on which label this album is under.
+    const key = normalize(title) + "||" + normalize(artist);
+    const canonLabel = labelDiskCache.get(key);
+    if (canonLabel) {
+      if (!bios) bios = { album: null, artist: null };
+      if (!bios.album) bios.album = {};
+      bios.album.label = canonLabel;
+    }
     res.json({
       year,
       album:  bios ? bios.album  : null,
