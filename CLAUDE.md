@@ -14,17 +14,39 @@ default behaviours. Do not deviate from them unless the user explicitly says so 
 Run these in order. Do not commit if any step fails.
 
 ```bash
-# 1. Syntax check — catches crashes before they happen
-node --check index.js
+# CLAUDE.md - Mobile-First Zero-Tolerance Quality System
 
-# 2. Variable name consistency — grep for UPPER_SNAKE leftovers
-#    (catches the DISCOGS_TOKEN vs discogsToken class of bug)
-grep -n 'DISCOGS_TOKEN\|FANART_TV_KEY' index.js && echo "ERROR: stale constant name" || echo "OK"
+## Core Mandate
+- ZERO regression allowed. Every bug fix must include a corresponding test.
+- ZERO blind-merging. Never output partial layouts or say "this will do."
+- ALWAYS run automated tests before asking for mobile user validation.
 
-# 3. Temporal dead zone audit — every `let`/`const` must appear BEFORE
-#    any bare assignment to the same name at module level
-#    (catches the v1.5.66 startup crash class of bug)
-node -e "require('./index.js')" 2>&1 | head -5
+## Mobile Agent Workflow (Remote Control Loop)
+When executing prompts via the iOS app, Claude must act as a multi-agent loop:
+1. **Architect Agent**: Scan files, map side effects, and verify changes won't break mobile rendering.
+2. **Reviewer Agent**: Ensure the change handles edge cases, empty states, and errors safely.
+3. **Developer Agent**: Apply complete, production-grade code. No inline placeholders (`// ...`).
+4. **QA Agent**: Execute the exact build/test commands, verify pass status, and cleanly format the results.
+
+## Push Notification Triggers
+- Use the mobile push notification channel proactively (`/config` notification settings).
+- Send a high-priority push notification IMMEDIATELY when:
+  * A long-running test suite finishes or errors out.
+  * An architectural blocker requires a strict design decision.
+  * Code has passed all QA checks and is ready for mobile review.
+- Tag notifications clearly: `[PASS] Ready for review` or `[FAIL] Test Error on Line X`.
+
+## Compact Operational Commands
+Keep output text compact to prevent excessive scrolling on small iOS displays.
+- Install Dependencies: [Insert e.g., `npm install` or `pod install`]
+- Run Type Checks: [Insert e.g., `npm run lint` or `swiftlint`]
+- Execute Test Suite: [Insert e.g., `npm test` or `xcodebuild test`]
+- Auto-Fix & Format: [Insert e.g., `npx prettier --write .` or `swiftformat .`]
+
+## Anti-Regression & Fail-Safe Guardrails
+- **Fail Fast**: If a test fails, halt immediately. Do not guess or continue writing features.
+- **Strict Layout Constraints**: Never let UI changes break standard responsiveness or overflow mobile views.
+- **Forbidden Patterns**: Never rewrite `.pbxproj` or core project configuration files unless explicitly directed. Use isolated source code files.
 ```
 
 If step 3 cannot run (Roon not available), run steps 1 and 2 and explicitly note why 3 was skipped.
