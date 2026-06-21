@@ -10,46 +10,23 @@ A web UI that shows a screenful of random albums from your Roon library, with in
 
 > The Roon API does not let third-party code navigate the Roon app itself, so the album detail view (art, tracks, action buttons) is rendered inside this UI. Tapping **Play Now** still plays through Roon on the zone you select.
 
+---
 
-## What's new since v1.5.49
+## Features
 
-**v1.5.74** is the current release. Here's a summary of everything added or improved since v1.5.49.
-
-### Label browser
-
-- **Label in album modal** — the record label now appears on the subtitle line alongside artist and year (e.g. `Kraftwerk · 1974 · Parlophone UK`). Tapping the label name navigates directly to that label's albums in the Labels browser.
-- **Label merge** — long-press any label tile to enter select mode, tap two or more labels, then tap **Merge**. The first tile tapped becomes the merge target. Merges survive restarts and rescans. To undo, tap the "N merged" indicator on a tile and remove individual merges one at a time.
-- **Logo picker** — tap the photo icon in a label's album header to open the logo picker. It searches Discogs automatically and shows up to six logo candidates as thumbnails — tap one to save immediately. Or paste any direct image URL. The image is downloaded and cached locally so it works even if the source URL changes.
-- **Force rescan** — a **Force rescan** button in Settings clears the label name cache (logos and MBIDs are kept) and kicks off a fresh scan from all sources. Useful after importing new albums or if a label looks wrong.
-- **Label fragmentation fixes** — labels like `"A&M Records, Inc."`, `"A&M Records"`, and `"A&M"` now correctly consolidate into one tile. Trailing punctuation and corporate suffixes are stripped progressively.
-
-### Album wall
-
-- **Multi-select albums** — long-press any album tile to enter select mode. Tap more tiles to add them, then use the action bar at the bottom to **Play Now** or **Queue** all selected albums at once. Play Now starts the first and queues the rest; albums 2–N are sent to Roon in parallel so the wait is minimal.
-- **Play count badges** — album tiles show a small "N×" badge if that album appears in your play history, so you can see at a glance what you've heard before.
-
-### Discogs & FanArt.tv integration
-
-- **Discogs token in Settings** — enter your Discogs personal access token via the gear icon → Discogs token. No environment variables or config files needed; it is stored in your Docker volume and survives updates.
-- **FanArt.tv key in Settings** — same for your FanArt.tv API key. Enter it in Settings → FanArt.tv key.
-- **Improved logo search** — Discogs logo fetches now handle labels with leading symbols (e.g. `~scape`, `[PIAS]`, `(4AD)`) correctly. Placeholder/spacer images are filtered out automatically. Network errors can retry on the next scan; only definitive "not found" results are cached.
-
-### Scan pipeline
-
-- **Scan never locks up** — if any pass throws an exception, the scan now resets cleanly so the next auto-rescan or manual rescan can proceed.
-- **Accurate progress bar** — the bar tracks all five passes correctly and never exceeds 100% or freezes mid-scan.
-- **MusicBrainz MBID caching** — failed MBID lookups are now cached for the session so MusicBrainz isn't re-queried for the same label on every scan cycle.
-
-### Search
-
-- **Artists, Labels, and Albums in search results** — results are now split into three sections. Artists and Labels appear as tappable chips above the album grid; tap an artist to see all their albums, tap a label to go straight to that label's browser.
-- **Multi-artist links** — when an album has multiple artists (e.g. `Artist A / Artist B` or `Artist A feat. Artist B`), each name is a separate tappable link in the album detail view.
-
-### Other
-
-- **Labels browser scroll position retained** — returning from a label's album list now restores your position in the labels grid instead of jumping back to the top.
-- **Self-Released and Independent are now browsable** — albums attributed to these appear as label tiles so you can browse your self-released collection.
-- **Random Album Radio reliability** — fixed edge cases where radio would auto-start after a Roon restart or container restart when it should have stayed stopped.
+- **Random album grid** — fills your screen with random picks from your full library, refreshed on demand
+- **Instant search** — whole-library search with results split into Artists, Labels, and Albums sections; tap an artist or label chip to navigate directly
+- **Album detail** — full track listing, play/queue actions, release year, label link, editorial review, and artist bio; multiple artists are shown as individual tappable links
+- **Now Playing** — live panel showing the current track with album art and transport controls
+- **Play unheard** — one tap to find and play an album not in your listening history; falls back to anything not played in the last 30 days once your whole library has been heard
+- **Random Album Radio** — automatically queues a new random album when your queue runs dry, preferring albums not recently played
+- **Record labels** — browse your library by label, with logos from FanArt.tv and Discogs where available; includes Self-Released and Independent
+- **Label merge** — consolidate duplicate or variant label tiles into one; undo individual merges at any time
+- **Multi-select** — long-press to select multiple album tiles and play or queue them all at once
+- **Filters** — narrow the random pool by genre, decade, tag, or label
+- **Artist view** — tap any artist name to see all their albums in your library
+- **Share card** — generates a 1200×600 PNG of the current album, ready to share
+- **In-app updater** — checks for new releases automatically; install with one tap from Settings
 
 ---
 
@@ -78,25 +55,7 @@ FanArt.tv provides high-quality label logos for labels that have a MusicBrainz M
 
 ---
 
-> **Note on label accuracy** — an album may appear under a label that differs from the one shown in Roon's own album view. This is usually correct: many albums were released under multiple labels simultaneously (for example, Daughtry's *Baptized* was released under 19 Recordings, RCA, and Sony Music). The extension shows whichever label your file tags or the scan sources attribute to the album in the case of being a Qobuz or Tidal version.
-
----
-
-## Features
-
-- **Random album grid** — fills your screen with random picks from your full library, refreshed on demand
-- **Instant search** — whole-library search with results as you type
-- **Album detail** — full track listing, play/queue actions, release year, label link, editorial review, and artist bio
-- **Now Playing** — live panel showing the current track with album art and transport controls
-- **Play unheard** — one tap to find and play an album not in your listening history; falls back to anything not played in the last 30 days once your whole library has been heard
-- **Random Album Radio** — automatically queues a new random album when your queue runs dry, preferring albums not recently played
-- **Record labels** — browse your library by label, with logos from FanArt.tv and Discogs where available
-- **Label merge** — consolidate duplicate or variant label tiles into one
-- **Multi-select** — select multiple album tiles and play or queue them all at once
-- **Filters** — narrow the random pool by genre, decade, tag, or label
-- **Artist view** — tap any artist name to see all their albums in your library
-- **Share card** — generates a 1200×600 PNG of the current album, ready to share
-- **In-app updater** — checks for new releases automatically; install with one tap from Settings
+> **Note on label accuracy** — an album may appear under a label that differs from the one shown in the album view. This could be correct: many albums could be released under multiple labels simultaneously (for example, Daughtry's *Baptized* was released under 19 Recordings, RCA, and Sony Music). The extension shows whichever label your file tags or the scan sources attribute to the album in the case of being a Qobuz or Tidal version.
 
 ---
 
