@@ -70,10 +70,11 @@ Discogs is used to find label names for albums that iTunes and MusicBrainz miss,
 
 FanArt.tv provides high-quality label logos for labels that have a MusicBrainz MBID.
 
-1. Register free at [fanart.tv](https://fanart.tv)
-2. Go to your profile → **API key** (top right menu)
-3. Copy the key shown there
-4. In the extension, tap the gear icon → paste into **FanArt.tv key** → tap **Save**
+1. Register free at [fanart.tv](https://fanart.tv/get-an-api-key/#personal) for a personel API token
+2. login or register
+3. follow onscreen prompts (or come back here after registering/login and click on above link)
+4. Copy the key shown there
+5. In the extension, tap the gear icon → paste into **FanArt.tv key** → tap **Save**
 
 ---
 
