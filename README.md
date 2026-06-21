@@ -13,7 +13,7 @@ A web UI that shows a screenful of random albums from your Roon library, with in
 
 ## What's new since v1.5.49
 
-**v1.5.72** is the current release. Here's a summary of everything added or improved since v1.5.49.
+**v1.5.74** is the current release. Here's a summary of everything added or improved since v1.5.49.
 
 ### Label browser
 
@@ -40,8 +40,15 @@ A web UI that shows a screenful of random albums from your Roon library, with in
 - **Accurate progress bar** — the bar tracks all five passes correctly and never exceeds 100% or freezes mid-scan.
 - **MusicBrainz MBID caching** — failed MBID lookups are now cached for the session so MusicBrainz isn't re-queried for the same label on every scan cycle.
 
+### Search
+
+- **Artists, Labels, and Albums in search results** — results are now split into three sections. Artists and Labels appear as tappable chips above the album grid; tap an artist to see all their albums, tap a label to go straight to that label's browser.
+- **Multi-artist links** — when an album has multiple artists (e.g. `Artist A / Artist B` or `Artist A feat. Artist B`), each name is a separate tappable link in the album detail view.
+
 ### Other
 
+- **Labels browser scroll position retained** — returning from a label's album list now restores your position in the labels grid instead of jumping back to the top.
+- **Self-Released and Independent are now browsable** — albums attributed to these appear as label tiles so you can browse your self-released collection.
 - **Random Album Radio reliability** — fixed edge cases where radio would auto-start after a Roon restart or container restart when it should have stayed stopped.
 
 ---
@@ -97,8 +104,8 @@ FanArt.tv provides high-quality label logos for labels that have a MusicBrainz M
 ```bash
 sudo mkdir -p /opt/roon-random-albums
 cd /opt/roon-random-albums
-wget https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/v1.5.72/roon-random-albums-v1.5.72-docker.tar.gz
-tar -xzf roon-random-albums-v1.5.72-docker.tar.gz
+wget https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/v1.5.74/roon-random-albums-v1.5.74-docker.tar.gz
+tar -xzf roon-random-albums-v1.5.74-docker.tar.gz
 docker build -t roon-random-albums:1.5.72 .
 docker run -d \
   --name roon-random-albums \
@@ -156,8 +163,8 @@ sudo systemctl disable roon-random-albums
 # 2. Create the build directory and download the tarball
 sudo mkdir -p /opt/roon-random-albums
 cd /opt/roon-random-albums
-wget https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/v1.5.72/roon-random-albums-v1.5.72-docker.tar.gz
-tar -xzf roon-random-albums-v1.5.72-docker.tar.gz
+wget https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/v1.5.74/roon-random-albums-v1.5.74-docker.tar.gz
+tar -xzf roon-random-albums-v1.5.74-docker.tar.gz
 
 # 3. Build and run
 docker build -t roon-random-albums:1.5.72 .

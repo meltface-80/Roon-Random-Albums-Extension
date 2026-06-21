@@ -164,7 +164,7 @@ The user manually publishes releases on GitHub when they are satisfied with test
 - The README contains version references (install commands, tarball URLs, `docker build` tags).
 - **Do not change any version number in README.md** unless the user explicitly says
   "promote to latest" or "update the README".
-- Current stable version in the README: **v1.5.49** (until the user says otherwise).
+- Current stable version in the README: **v1.5.74** (until the user says otherwise).
 
 ---
 
