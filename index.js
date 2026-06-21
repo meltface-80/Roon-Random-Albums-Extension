@@ -200,16 +200,16 @@ const svc_settings = new RoonApiSettings(roon, {
     if (!isdryrun) {
       if (l.values.do_update === "yes") {
         svc_settings.update_settings(makeSettingsLayout());
-        updater.apply().then(() => { pushStatus(); refreshSettings(); }).catch(() => {});
+        updater.apply().then(() => { pushStatus(); refreshSettings(); }).catch(() => { /* apply errors are surfaced via pushStatus; nothing else to do */ });
       }
       if (l.values.do_check === "yes") {
         svc_settings.update_settings(makeSettingsLayout());
-        updater.checkNow().then(() => { pushStatus(); refreshSettings(); }).catch(() => {});
+        updater.checkNow().then(() => { pushStatus(); refreshSettings(); }).catch(() => { /* check errors surface via pushStatus next tick */ });
       }
     }
   }
 });
-function refreshSettings() { try { svc_settings.update_settings(makeSettingsLayout()); } catch (e) {} }
+function refreshSettings() { try { svc_settings.update_settings(makeSettingsLayout()); } catch (e) { /* Roon not yet paired — no settings service to update */ } }
 
 roon.init_services({
   required_services: [RoonApiTransport, RoonApiBrowse, RoonApiImage],
@@ -468,7 +468,7 @@ async function pickSmartAlbum() {
               .all(cutoff).map(r => r.a)
     );
   } catch (e) {
-    recent = new Set();
+    recent = new Set(); // DB unavailable — degrade gracefully to pure-random pick
   }
   if (recent.size === 0) return (await pickRandomAlbums(1)).albums[0] || null;
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -980,7 +980,7 @@ function seedLabelsFromCache() {
     const diskLabel = labelDiskCache.get(key);
     if (diskLabel) { labelsIndexAddAlbum(diskLabel, al); continue; }
     const q = qobuzCache.get(key);
-    if (q && q.label) {
+    if (q && q.label && !isLikelyNotALabel(q.label)) {
       labelsIndexAddAlbum(q.label, al);
       setLabelName(key, q.label);
     }
@@ -1005,7 +1005,7 @@ function rebuildLabelsMap() {
     const diskLabel = labelDiskCache.get(key);
     if (diskLabel) { labelsIndexAddAlbum(diskLabel, al); continue; }
     const q = qobuzCache.get(key);
-    if (q && q.label) labelsIndexAddAlbum(q.label, al);
+    if (q && q.label && !isLikelyNotALabel(q.label)) labelsIndexAddAlbum(q.label, al);
   }
   labelsIndex.count = labelsIndex.map.size;
 }
@@ -1041,7 +1041,7 @@ async function fetchLabelFromiTunes(title, artist) {
     }
     if (!match) match = results[0];
     const label = match && match.recordLabel;
-    if (!label || /self.released|independent|self-released/i.test(label)) return null;
+    if (!label || isLikelyNotALabel(label)) return null;
     return label;
   } catch (e) {
     if (e.message && /429|403/.test(e.message)) {
@@ -1101,6 +1101,13 @@ async function fetchLabelMbidFromMusicBrainz(labelName) {
 // Discogs — personal access token auth (60 req/min vs 25 for key/secret).
 // Stored in settings.json, configurable via the web UI settings panel.
 // ---------------------------------------------------------------------------
+// Strip leading AND trailing non-alphanumeric chars before Discogs queries.
+// Discogs Elasticsearch treats ~ as a fuzzy operator and unbalanced brackets
+// like "[PIAS]" → "PIAS]" trip range-query parsing.
+function sanitizeDiscogsSearchTerm(name) {
+  return name.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "").trim() || name;
+}
+
 let discogsLastReq = 0;
 const discogsLogoTried = new Set(); // per-session dedup — resets on container restart
 
@@ -1128,7 +1135,6 @@ async function fetchLabelFromDiscogs(title, artist) {
     if (!match) match = results[0];
     const label = match && Array.isArray(match.label) && match.label[0];
     if (!label || isLikelyNotALabel(label)) return null;
-    if (/self.released|independent/i.test(label)) return null;
     return label;
   } catch (e) {
     if (DEBUG) console.error("[labels:discogs]", e.message);
@@ -1334,6 +1340,10 @@ async function runLabelsIndexScan() {
         setLabelMbid(gk, resolvedMbid);
         const entry = labelsIndex.map.get(gk);
         if (entry && !entry.mbid) entry.mbid = resolvedMbid;
+      } else {
+        // Cache null so we don't re-query MusicBrainz for this label every scan.
+        // Not persisted to DB — retried on container restart.
+        labelMbidCache.set(gk, null);
       }
     }
   };
@@ -1589,14 +1599,19 @@ async function fetchFanArtLogo(groupKey, mbid) {
     const json = await httpJson(url);
     const logos = json && json.musiclabel;
     const logoUrl = Array.isArray(logos) && logos.length ? logos[0].url : null;
-    setLabelLogo(groupKey, logoUrl);
-    const entry = labelsIndex.map.get(groupKey);
+    // Follow any merge that happened before/during the fetch so logo persists under canonical key.
+    const mergeTarget = labelMerges.get(groupKey);
+    const canonKey = mergeTarget ? mergeTarget.targetKey : groupKey;
+    setLabelLogo(canonKey, logoUrl);
+    const entry = labelsIndex.map.get(canonKey);
     if (entry) entry.logo_url = logoUrl;
     if (DEBUG) console.log("[labels:fanart]", groupKey, "→", logoUrl || "(no logo)");
   } catch (e) {
     // Don't cache on network error — retry next restart. 404 = no logo, cache null.
     if (e.message && e.message.includes("404")) {
-      setLabelLogo(groupKey, null);
+      const mergeTarget = labelMerges.get(groupKey);
+      const canonKey = mergeTarget ? mergeTarget.targetKey : groupKey;
+      setLabelLogo(canonKey, null);
     }
     if (DEBUG) console.error("[labels:fanart]", groupKey, e.message);
   }
@@ -1630,11 +1645,7 @@ async function kickFanArtFetches() {
 async function fetchLogoFromDiscogs(labelName) {
   if (!discogsToken) return { logo: null, reason: "no-token" };
   await discogsWait();
-  // Strip leading AND trailing non-alphanumeric characters before searching — Discogs uses
-  // Elasticsearch where ~ is a fuzzy operator ("~scape"), and unbalanced brackets like
-  // "[PIAS]" → "PIAS]" or "(4AD)" → "4AD)" trip range-query parsing.
-  // The original name is still used for result matching via labelGroupKey.
-  const searchTerm = labelName.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "").trim() || labelName;
+  const searchTerm = sanitizeDiscogsSearchTerm(labelName);
   const url = `https://api.discogs.com/database/search?type=label&q=${encodeURIComponent(searchTerm)}&per_page=5`;
   try {
     const json = await httpJson(url, {
@@ -1672,8 +1683,9 @@ async function kickDiscogsLogoFetches() {
   appendLabelsLog("[labels:discogs:logos] fetching logos for " + pending.length + " labels");
   let found = 0, emptyCount = 0, filteredCount = 0, errorCount = 0;
   for (const { groupKey, display } of pending) {
-    discogsLogoTried.add(groupKey);
     const { logo, reason } = await fetchLogoFromDiscogs(display);
+    // Only mark tried on definitive results — network errors can retry next scan cycle.
+    if (reason !== "error") discogsLogoTried.add(groupKey);
     if (logo) {
       // Follow any merge that happened mid-flight so logo persists under the canonical key.
       const mergeTarget = labelMerges.get(groupKey);
@@ -1970,7 +1982,7 @@ async function fetchQobuz(title, artist) {
 
   // Keep the disk label cache in sync — persists across restarts so the
   // background scan can skip this album next time.
-  if (out && out.label && !labelDiskCache.has(key)) {
+  if (out && out.label && !labelDiskCache.has(key) && !isLikelyNotALabel(out.label)) {
     setLabelName(key, out.label);
     // Also enrich the live labelsIndex (in case the scan hasn't reached this album yet).
     const al = albumIndex.albums.find(
@@ -2234,7 +2246,7 @@ async function ensureAlbumIndex() {
     buildAlbumIndex().catch(e => { if (DEBUG) console.error("[index] build failed:", e.message); });
   }
   if (albumIndex.count === 0 && albumIndex.building) {
-    await albumIndex.building.catch(() => {});
+    await albumIndex.building.catch(() => { /* build error already logged by buildAlbumIndex */ });
   }
 }
 
@@ -2255,9 +2267,9 @@ function startIndexMaintenance() {
       const total = head.list && head.list.count ? head.list.count : 0;
       if (total !== albumIndex.count) {
         if (DEBUG) console.log("[index] count changed", albumIndex.count, "->", total, "- rebuilding");
-        buildAlbumIndex().catch(() => {});
+        buildAlbumIndex().catch(() => { /* build error already logged by buildAlbumIndex */ });
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* browse/load probe failed — next maintenance tick will retry */ }
   }, INDEX_CHECK_MS);
 }
 function stopIndexMaintenance() {
@@ -2642,7 +2654,7 @@ app.get("/api/labels/logo-candidates", async (req, res) => {
   const normTarget = labelGroupKey(name);
   try {
     await discogsWait();
-    const searchTerm = name.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "").trim() || name;
+    const searchTerm = sanitizeDiscogsSearchTerm(name);
     const json = await httpJson(
       `https://api.discogs.com/database/search?type=label&q=${encodeURIComponent(searchTerm)}&per_page=25`,
       headers, 10000
@@ -2977,7 +2989,7 @@ app.post("/api/update/apply", async (req, res) => {
   // Respond first; apply() downloads + stages, then exits with code 75 so the
   // launcher (or a process supervisor) restarts into the new version.
   res.json({ ok: true, status: updater.getStatus() });
-  updater.apply().then(() => { pushStatus(); refreshSettings(); }).catch(() => {});
+  updater.apply().then(() => { pushStatus(); refreshSettings(); }).catch(() => { /* apply errors surface via pushStatus */ });
 });
 
 // ---------------------------------------------------------------------------
@@ -3612,7 +3624,7 @@ app.post("/api/play-unheard", async (req, res) => {
         heard = new Set(
           labelsDb.prepare("SELECT DISTINCT lower(trim(album)) as a FROM plays WHERE album != ''").all().map(r => r.a)
         );
-      } catch (e) { heard = new Set(); }
+      } catch (e) { heard = new Set(); /* DB unavailable — degrade to pure-random */ }
       for (let attempt = 0; attempt < 10 && !pick; attempt++) {
         const candidates = (await pickRandomAlbums(10)).albums;
         const fresh = candidates.filter(a => !heard.has((a.title || "").toLowerCase().trim()));
@@ -3685,7 +3697,7 @@ app.get("/api/shortcut/play-unheard", async (req, res) => {
         heard = new Set(
           labelsDb.prepare("SELECT DISTINCT lower(trim(album)) as a FROM plays WHERE album != ''").all().map(r => r.a)
         );
-      } catch (e) { heard = new Set(); }
+      } catch (e) { heard = new Set(); /* DB unavailable — degrade to pure-random */ }
       for (let attempt = 0; attempt < 10 && !pick; attempt++) {
         const candidates = (await pickRandomAlbums(10)).albums;
         const fresh = candidates.filter(a => !heard.has((a.title || "").toLowerCase().trim()));
