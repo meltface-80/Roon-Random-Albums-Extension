@@ -1247,6 +1247,9 @@ async function buildFileLabelMap(onProgress) {
 // Background scan — multi-pass label lookup pipeline.
 // Pass 0: File metadata (if /music mounted) — most authoritative.
 // Pass 1: iTunes (3 concurrent, 500ms between batches, abort on 429/403).
+// Pass Q: Qobuz (streaming-only libraries, i.e. no /music mount) — the user's
+//         actual source, so it resolves most iTunes-misses in one pass and
+//         keeps them out of the slow TADB→MB→Discogs cascade.
 // Pass 2: TheAudioDB (serial, 1 req/sec).
 // Pass 3: MusicBrainz (serial, rate-limited) — broad coverage.
 // Pass 4: Discogs (serial, rate-limited) — last resort.
@@ -1316,7 +1319,19 @@ async function runLabelsIndexScan() {
   // Within each pass: interpolate between the pass start and end percentages.
   const basePct = total > 0 ? alreadyDone / total : 0;
   const scanPct = 1 - basePct; // fraction of bar dedicated to this scan
-  const PASS_ENDS = [0.10, 0.20, 0.50, 0.80, 1.00]; // cumulative pass weights: files 0-10%, iTunes 10-20%, TADB 20-50%, MB 50-80%, Discogs 80-100%
+  // Streaming-only libraries (no /music mount) get an extra Qobuz pass between
+  // iTunes and TheAudioDB. Qobuz is the user's actual source, so it resolves
+  // most iTunes-misses in one pass instead of walking the slow serial
+  // TADB→MB→Discogs cascade. The pass-index map and band weights shift to give
+  // the Qobuz pass its own slice of the progress bar.
+  const streamingOnly = !musicDirMounted();
+  const PASS = streamingOnly
+    ? { files: 0, itunes: 1, qobuz: 2, tadb: 3, mb: 4, discogs: 5 }
+    : { files: 0, itunes: 1,            tadb: 2, mb: 3, discogs: 4 };
+  // cumulative pass weights (fraction of the scan portion of the bar).
+  const PASS_ENDS = streamingOnly
+    ? [0.05, 0.15, 0.45, 0.60, 0.85, 1.00] // files, iTunes, Qobuz, TADB, MB, Discogs
+    : [0.10, 0.20,       0.50, 0.80, 1.00]; // files, iTunes, TADB, MB, Discogs
   function passProgress(passIdx, pos, passTotal) {
     const start = passIdx > 0 ? PASS_ENDS[passIdx - 1] : 0;
     const end = PASS_ENDS[passIdx];
@@ -1356,7 +1371,7 @@ async function runLabelsIndexScan() {
     if (fileLabel) {
       await saveLabelEntry(key, fileLabel, null, al);
       done++;
-      labelsIndex.progress = passProgress(0, done, scanCount);
+      labelsIndex.progress = passProgress(PASS.files, done, scanCount);
     } else {
       needsApiScan.push(al);
     }
@@ -1392,7 +1407,7 @@ async function runLabelsIndexScan() {
       needsAudioDB.push(al);
     }
     done++;
-    labelsIndex.progress = passProgress(1, done, scanCount);
+    labelsIndex.progress = passProgress(PASS.itunes, done, scanCount);
   };
   for (let i = 0; i < needsApiScan.length; i += ITUNES_BATCH) {
     if (itunesAborted) { needsAudioDB.push(...needsApiScan.slice(i)); break; }
@@ -1407,10 +1422,62 @@ async function runLabelsIndexScan() {
     appendLabelsLog(itunesMsg);
   }
 
+  // Pass Q (Qobuz) — streaming-only libraries only (no /music mount).
+  // Qobuz is the user's actual streaming source, so it resolves most albums
+  // iTunes missed in a single pass; every hit here skips the slow serial
+  // TADB→MB→Discogs cascade. Serial (700ms/req, two requests per album) with
+  // the same 10-consecutive-error circuit breaker as the other network passes.
+  // fetchQobuz already persists labels to labelDiskCache/labelsIndex; routing
+  // hits through saveLabelEntry additionally resolves the label MBID for logos.
+  let needsTadb = needsAudioDB;
+  if (streamingOnly && needsAudioDB.length) {
+    needsTadb = [];
+    const qStartMsg = "[labels] pass Q (Qobuz, streaming-only): " + needsAudioDB.length + " albums";
+    if (DEBUG) console.log(qStartMsg);
+    appendLabelsLog(qStartMsg);
+    let qobuzErrors = 0;
+    let qobuzConsec = 0;
+    let qobuzAborted = false;
+    for (let qi = 0; qi < needsAudioDB.length; qi++) {
+      if (qobuzAborted) {
+        needsTadb.push(...needsAudioDB.slice(qi));
+        labelsIndex.progress = passProgress(PASS.qobuz, needsAudioDB.length, needsAudioDB.length);
+        break;
+      }
+      const al = needsAudioDB[qi];
+      const key = normalize(al.title) + "||" + normalize(al.subtitle);
+      try {
+        const q = await fetchQobuz(al.title, al.subtitle);
+        if (q && q.label && !isLikelyNotALabel(q.label)) { await saveLabelEntry(key, q.label, null, al); qobuzConsec = 0; }
+        else { needsTadb.push(al); qobuzConsec = 0; }
+      } catch (e) {
+        qobuzErrors++;
+        qobuzConsec++;
+        needsTadb.push(al);
+        appendLabelsLog("[labels:qobuz] error for \"" + al.title + "\": " + e.message);
+        if (qobuzConsec >= 10) {
+          qobuzAborted = true;
+          const msg = "[labels] pass Q (Qobuz): " + qobuzConsec + " consecutive errors — aborting, will retry next scan window";
+          console.log(msg);
+          appendLabelsLog(msg);
+        }
+      }
+      labelsIndex.progress = passProgress(PASS.qobuz, qi + 1, needsAudioDB.length);
+      if ((qi + 1) % 100 === 0) {
+        appendLabelsLog("[labels] pass Q (Qobuz): " + (qi + 1) + "/" + needsAudioDB.length + " done so far");
+      }
+    }
+    const qMsg = "[labels] pass Q (Qobuz): complete, " + needsTadb.length + " forwarded to TheAudioDB" +
+      (qobuzAborted ? " (aborted — consecutive errors)" : "") +
+      (qobuzErrors ? ", " + qobuzErrors + " errors total" : "");
+    if (DEBUG) console.log(qMsg);
+    appendLabelsLog(qMsg);
+  }
+
   // Pass 2: TheAudioDB — serial (1 req/sec rate limit on the free API).
   // Circuit breaker: 10 consecutive errors → abort pass, wait for next scan window.
-  if (needsAudioDB.length) {
-    const tadbStartMsg = "[labels] pass 2 (TheAudioDB): " + needsAudioDB.length + " albums";
+  if (needsTadb.length) {
+    const tadbStartMsg = "[labels] pass 2 (TheAudioDB): " + needsTadb.length + " albums";
     if (DEBUG) console.log(tadbStartMsg);
     appendLabelsLog(tadbStartMsg);
   }
@@ -1418,13 +1485,13 @@ async function runLabelsIndexScan() {
   let tadbErrors = 0;
   let tadbConsec = 0;
   let tadbAborted = false;
-  for (let ti = 0; ti < needsAudioDB.length; ti++) {
+  for (let ti = 0; ti < needsTadb.length; ti++) {
     if (tadbAborted) {
-      needsMB.push(...needsAudioDB.slice(ti));
-      labelsIndex.progress = passProgress(2, needsAudioDB.length, needsAudioDB.length);
+      needsMB.push(...needsTadb.slice(ti));
+      labelsIndex.progress = passProgress(PASS.tadb, needsTadb.length, needsTadb.length);
       break;
     }
-    const al = needsAudioDB[ti];
+    const al = needsTadb[ti];
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     try {
       const label = await fetchLabelFromTheAudioDB(al.title, al.subtitle);
@@ -1441,12 +1508,12 @@ async function runLabelsIndexScan() {
         appendLabelsLog(msg);
       }
     }
-    labelsIndex.progress = passProgress(2, ti + 1, needsAudioDB.length);
+    labelsIndex.progress = passProgress(PASS.tadb, ti + 1, needsTadb.length);
     if ((ti + 1) % 100 === 0) {
-      appendLabelsLog("[labels] pass 2 (TheAudioDB): " + (ti + 1) + "/" + needsAudioDB.length + " done so far");
+      appendLabelsLog("[labels] pass 2 (TheAudioDB): " + (ti + 1) + "/" + needsTadb.length + " done so far");
     }
   }
-  if (needsAudioDB.length) {
+  if (needsTadb.length) {
     const tadbMsg = "[labels] pass 2 (TheAudioDB): complete, " + needsMB.length + " forwarded to MB" +
       (tadbAborted ? " (aborted — consecutive errors)" : "") +
       (tadbErrors ? ", " + tadbErrors + " errors total" : "");
@@ -1468,7 +1535,7 @@ async function runLabelsIndexScan() {
   for (let mi = 0; mi < needsMB.length; mi++) {
     if (mbAborted) {
       needsDiscogs.push(...needsMB.slice(mi));
-      labelsIndex.progress = passProgress(3, needsMB.length, needsMB.length);
+      labelsIndex.progress = passProgress(PASS.mb, needsMB.length, needsMB.length);
       break;
     }
     const al = needsMB[mi];
@@ -1488,7 +1555,7 @@ async function runLabelsIndexScan() {
         appendLabelsLog(msg);
       }
     }
-    labelsIndex.progress = passProgress(3, mi + 1, needsMB.length);
+    labelsIndex.progress = passProgress(PASS.mb, mi + 1, needsMB.length);
     if ((mi + 1) % 100 === 0) {
       appendLabelsLog("[labels] pass 3 (MusicBrainz): " + (mi + 1) + "/" + needsMB.length + " done so far");
     }
@@ -1514,7 +1581,7 @@ async function runLabelsIndexScan() {
   const discogsPassDeadline = Date.now() + 5 * 60 * 1000; // 5-minute cap
   for (let di = 0; di < needsDiscogs.length; di++) {
     if (discogsAborted) {
-      labelsIndex.progress = passProgress(4, needsDiscogs.length, needsDiscogs.length);
+      labelsIndex.progress = passProgress(PASS.discogs, needsDiscogs.length, needsDiscogs.length);
       break;
     }
     const al = needsDiscogs[di];
@@ -1533,7 +1600,7 @@ async function runLabelsIndexScan() {
         appendLabelsLog(msg);
       }
     }
-    labelsIndex.progress = passProgress(4, di + 1, needsDiscogs.length);
+    labelsIndex.progress = passProgress(PASS.discogs, di + 1, needsDiscogs.length);
     if (!discogsAborted && Date.now() > discogsPassDeadline) {
       discogsAborted = true;
       const tMsg = "[labels] pass 4 (Discogs): 5-minute time limit reached — aborting, remainder at next scheduled scan";
