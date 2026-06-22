@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.75] — 2026-06-22
+
+### Changed
+- **Faster label scan for streaming-only (Qobuz/Tidal) libraries** — when no `/music` directory is mounted, the scan now inserts a Qobuz pass between iTunes and TheAudioDB. Qobuz is the user's actual streaming source, so it resolves most iTunes-misses in a single pass and keeps them out of the slow serial TheAudioDB → MusicBrainz → Discogs cascade (each of which is rate-limited to ~1 req/sec). The pass reuses the existing `fetchQobuz` scraper, filters results through `isLikelyNotALabel`, routes hits through `saveLabelEntry` (so label-logo MBID resolution still runs), and uses the same 10-consecutive-error circuit breaker as the other network passes. Progress weighting gains a dedicated Qobuz band when the pass is active.
+
 ## [1.5.74] — 2026-06-21
 
 ### Changed
