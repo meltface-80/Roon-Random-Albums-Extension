@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.83] — 2026-06-23
+
+### Fixed
+- **Back from a Qobuz album review returns to the new-releases list, not the random wall** — the Qobuz overlay is now history-aware. Opening the overlay and opening an album's review each push a history entry, and a `popstate` handler unwinds **detail → list → closed**, so the Android/browser back button (and the ‹ Back / × / Esc controls) all behave naturally. The handler is a no-op when the overlay is closed, so the rest of the app (which uses no history state) is unaffected.
+
 ## [1.5.82] — 2026-06-23
 
 ### Added

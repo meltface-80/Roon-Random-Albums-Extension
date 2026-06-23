@@ -3047,13 +3047,36 @@
   if (!btn || !overlay) return;
 
   const toast = (msg, kind) => { if (window.__showToast) window.__showToast(msg, kind); };
-  const close = () => overlay.classList.add("hidden");
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
     c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  overlay.querySelectorAll("[data-qobuz-close]").forEach(el => el.addEventListener("click", close));
+  const overlayVisible = () => !overlay.classList.contains("hidden");
+  const detailVisible  = () => !!detailEl && !detailEl.classList.contains("hidden");
+
+  // Fully hide the overlay (and any open detail).
+  function hideOverlay() {
+    overlay.classList.add("hidden");
+    if (detailEl) { detailEl.classList.add("hidden"); detailEl.innerHTML = ""; detailEl.dataset.albumId = ""; }
+  }
+
+  // All back/close affordances (× button, backdrop, ‹ Back, Esc) step back one
+  // history level via history.back(), which the popstate handler turns into
+  // detail → list → closed. This also makes the Android/browser back button
+  // behave naturally instead of leaving the page.
+  const goBack = () => history.back();
+
+  overlay.querySelectorAll("[data-qobuz-close]").forEach(el => el.addEventListener("click", goBack));
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !overlay.classList.contains("hidden")) close();
+    if (e.key === "Escape" && overlayVisible()) goBack();
+  });
+
+  // Browser / Android back: while the overlay is open, unwind detail→list→closed
+  // rather than navigating away. No-op when the overlay isn't open, so the rest
+  // of the app (which uses no history state) is unaffected.
+  window.addEventListener("popstate", () => {
+    if (!overlayVisible()) return;
+    if (detailVisible()) showList();
+    else hideOverlay();
   });
 
   // Reflect favourite state on a button (added = in the user's Qobuz library).
@@ -3112,7 +3135,7 @@
     back.type = "button";
     back.className = "qobuz-nr-back";
     back.textContent = "‹ Back";
-    back.addEventListener("click", showList);
+    back.addEventListener("click", goBack);
 
     const head = document.createElement("div");
     head.className = "qobuz-nr-detail-head";
@@ -3144,6 +3167,7 @@
     if (listEl) listEl.classList.add("hidden");
     if (statusEl) statusEl.classList.add("hidden");
     detailEl.classList.remove("hidden");
+    history.pushState({ qz: "detail" }, ""); // so back returns to the list, not the wall
 
     try {
       const params = new URLSearchParams({ title: album.title || "", artist: album.artist || "" });
@@ -3222,6 +3246,8 @@
   }
 
   btn.addEventListener("click", () => {
+    if (overlayVisible()) return;
+    history.pushState({ qz: "list" }, ""); // a back press from the list closes the overlay
     overlay.classList.remove("hidden");
     load();
   });
