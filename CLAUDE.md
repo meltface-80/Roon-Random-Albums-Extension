@@ -172,7 +172,7 @@ The user manually publishes releases on GitHub when they are satisfied with test
 - The README contains version references (install commands, tarball URLs, `docker build` tags).
 - **Do not change any version number in README.md** unless the user explicitly says
   "promote to latest" or "update the README".
-- Current stable version in the README: **v1.5.77** (until the user says otherwise).
+- Current stable version in the README: **v1.5.84** (until the user says otherwise).
 
 ---
 
@@ -236,7 +236,14 @@ docker run -d \
 | v1.5.74 | stable (superseded) | Search sections, label-in-modal, Self-Released/Independent tiles |
 | v1.5.75 | stable (superseded) | Qobuz label pass for streaming-only (Qobuz/Tidal) libraries |
 | v1.5.76 | stable (superseded) | Manual logo picker thumbnails doubled |
-| v1.5.77 | **Latest (stable)** | Back from a deep-linked label lands on that label in the grid — README points here |
+| v1.5.77 | stable (superseded) | Back from a deep-linked label lands on that label in the grid |
+| v1.5.78 | superseded | Read-only Roon browse probe (Qobuz feasibility) |
+| v1.5.79 | superseded | Qobuz New Releases + add-to-favourites (unofficial API) |
+| v1.5.80 | superseded | Qobuz: reflect existing favourites as Added |
+| v1.5.81 | superseded | Qobuz: un-favourite (two-way toggle) |
+| v1.5.82 | superseded | Qobuz: tap a release → review detail view |
+| v1.5.83 | superseded | Qobuz overlay history-aware back (detail→list→closed) |
+| v1.5.84 | **Latest (stable)** | Decade filter (per-album years collected during scan) — README points here |
 | v1.5.70 | superseded | Code review fixes: scan lockout, CDN redirect, auth guards |
 | v1.5.71 | superseded | Label scan/logo pipeline fixes (8-angle code review) |
 | v1.5.72 | current    | Label pipeline correctness, FanArt merge-redirect, Discogs retry fix |
