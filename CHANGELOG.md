@@ -2,6 +2,39 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.84] — 2026-06-23
+
+### Added
+- **Decade focus in the filter button** — the filter sheet now has a "Decade" section alongside Genre and Tag. Pick a decade (e.g. 1990s) to narrow the random wall to albums released in that decade. Because Roon's browse API exposes no release year, the decade is matched against a per-album year the extension now collects — for free — during the existing label scan: from file tags (local libraries), the Qobuz pass (streaming), and MusicBrainz label hits (same response, no extra request), plus whenever an album modal is opened. Years are stored in a new `album_years` SQLite table.
+  - **The Decade list populates gradually** and may be sparse at first: it only lists decades that already have albums with a resolved year, so it fills in as the label scan runs and as you browse. For streaming-only libraries especially, expect it to grow over the first scan rather than appear complete immediately.
+
+## [1.5.83] — 2026-06-23
+
+### Fixed
+- **Back from a Qobuz album review returns to the new-releases list, not the random wall** — the Qobuz overlay is now history-aware. Opening the overlay and opening an album's review each push a history entry, and a `popstate` handler unwinds **detail → list → closed**, so the Android/browser back button (and the ‹ Back / × / Esc controls) all behave naturally. The handler is a no-op when the overlay is closed, so the rest of the app (which uses no history state) is unaffected.
+
+## [1.5.82] — 2026-06-23
+
+### Added
+- **Tap a Qobuz new release to see its review** — tapping a row in the Qobuz New Releases overlay now opens an isolated detail view with the album artwork, the editorial review (fetched by title + artist via the existing `/api/album/extras`, so no Roon library entry is needed), and a favourite toggle. A Back button returns to the list. The favourite button in the detail and the one on the list row stay in sync, so adding/removing in either place is reflected in both. Tapping the favourite button on a row no longer also opens the detail (event isolated).
+
+## [1.5.81] — 2026-06-23
+
+### Added
+- **Un-favourite from the Qobuz new-releases overlay** — the favourite button is now a two-way toggle. Tapping "✓ Added" removes the album from your Qobuz favourites (via `favorite/delete`) and flips back to "♥ Favourite"; tapping "♥ Favourite" adds it as before. The add behaviour is unchanged; the button is disabled only while a request is in flight, and reverts cleanly on error.
+
+## [1.5.80] — 2026-06-23
+
+### Fixed
+- **Qobuz new releases now show your existing favourites as "✓ Added"** — previously the new-releases overlay only marked an album Added if you favourited it in that same browser session, so albums already in your Qobuz library (or favourited on another device) still showed "♥ Favourite", and the state differed between devices. The list now fetches your current Qobuz favourite album IDs (`favorite/getUserFavoriteIds`) on load and marks any already-favourited release as a disabled "✓ Added" — consistent across all devices. The lookup is best-effort: if it fails, the list still renders with everything clickable.
+
+## [1.5.79] — 2026-06-23
+
+### Added
+- **Qobuz New Releases + add-to-favourites (pre-release, unofficial API)** — a new `lib/qobuz.js` lite client talks to the Qobuz API (using the LMS/Lyrion Qobuz plugin's `app_id`) to list new releases and add an album to your **own Qobuz favourites/library**. A Qobuz button in the top bar opens a self-contained overlay listing releases from the last 30 days (artwork, title, artist), each with a **♥ Favourite** button that writes straight to Qobuz (and syncs back through Roon). Connect your Qobuz account in Settings (email + password; only the resulting token and an MD5 of the password are stored — never the plaintext). **No streaming or downloading — Roon still does all playback.**
+  - This uses an **unofficial, reverse-engineered Qobuz API** (the same one the LMS plugin uses). It is **against Qobuz's Terms of Service, may break at any time, and is used at your own risk** — clearly noted in Settings.
+  - The new-releases overlay is fully isolated from the album grid / labels / filters, so existing navigation is unaffected. Favouriting is by Qobuz album id straight from the new-releases feed (no fuzzy title/artist search), so there's no edition-mismatch risk.
+
 ## [1.5.78] — 2026-06-23
 
 ### Added

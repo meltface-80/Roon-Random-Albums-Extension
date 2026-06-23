@@ -1153,6 +1153,8 @@
     const genresList   = document.getElementById("filter-genres-list");
     const tagsToggle   = document.getElementById("filter-tags-toggle");
     const tagsList     = document.getElementById("filter-tags-list");
+    const decadesToggle = document.getElementById("filter-decades-toggle");
+    const decadesList   = document.getElementById("filter-decades-list");
     if (!overlay || !toggleBtn) return;
 
     function markActive() {
@@ -1184,7 +1186,9 @@
       if (!rows.length) {
         const d = document.createElement("div");
         d.className = "filter-empty";
-        d.textContent = type === "genre" ? "No genres found" : "No tags found";
+        d.textContent = type === "genre" ? "No genres found"
+                      : (type === "tag" ? "No tags found"
+                      : "No decades yet — release years fill in as the label scan runs.");
         container.appendChild(d);
         return;
       }
@@ -1210,17 +1214,19 @@
       markActive();
     }
 
-    const loaded = { genre: false, tag: false };
+    const loaded = { genre: false, tag: false, decade: false };
     async function ensureList(type) {
       if (loaded[type]) return;
-      const container = type === "genre" ? genresList : tagsList;
+      const container = type === "genre" ? genresList : (type === "tag" ? tagsList : decadesList);
       container.innerHTML = '<div class="filter-empty">Loading\u2026</div>';
       try {
-        const url = type === "genre" ? "/api/filters/genres" : "/api/filters/tags";
+        const url = type === "genre" ? "/api/filters/genres"
+                  : (type === "tag" ? "/api/filters/tags" : "/api/filters/decades");
         const r = await fetch(url);
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
-        renderList(container, type, (type === "genre" ? j.genres : j.tags) || []);
+        const rows = type === "genre" ? j.genres : (type === "tag" ? j.tags : j.decades);
+        renderList(container, type, rows || []);
         loaded[type] = true;
       } catch (e) {
         container.innerHTML = "";
@@ -1242,6 +1248,7 @@
     }
     wireSection(genresToggle, genresList, "genre");
     wireSection(tagsToggle,   tagsList,   "tag");
+    wireSection(decadesToggle, decadesList, "decade");
 
     function open()  { overlay.classList.remove("hidden"); markActive(); }
     function close() { overlay.classList.add("hidden"); }
@@ -2959,7 +2966,69 @@
     });
   }
 
-  const open = () => { loadRadio(); loadVersion(); loadDiscogsToken(); loadFanartKey(); overlay.classList.remove("hidden"); };
+  const qobuzUserInput  = document.getElementById("qobuz-username-input");
+  const qobuzPassInput  = document.getElementById("qobuz-password-input");
+  const qobuzConnect    = document.getElementById("qobuz-connect");
+  const qobuzDisconnect = document.getElementById("qobuz-disconnect");
+  const qobuzStatus     = document.getElementById("qobuz-status");
+
+  async function loadQobuzStatus() {
+    try {
+      const r = await fetch("/api/settings/qobuz");
+      const j = await r.json();
+      if (qobuzStatus) qobuzStatus.textContent = j.connected
+        ? ("Connected" + (j.displayName ? " as " + j.displayName : ""))
+        : "Not connected";
+      if (qobuzDisconnect) qobuzDisconnect.classList.toggle("hidden", !j.connected);
+    } catch (_) { /* display-only status — stale on failure is fine */ }
+  }
+
+  if (qobuzConnect) {
+    qobuzConnect.addEventListener("click", async () => {
+      const username = qobuzUserInput ? qobuzUserInput.value.trim() : "";
+      const password = qobuzPassInput ? qobuzPassInput.value : "";
+      if (!username || !password) { showToast("Enter your Qobuz email and password", "error"); return; }
+      qobuzConnect.disabled = true;
+      try {
+        const r = await fetch("/api/settings/qobuz", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+        const j = await r.json();
+        if (j.ok) {
+          if (qobuzPassInput) qobuzPassInput.value = "";
+          showToast("Qobuz connected" + (j.displayName ? " as " + j.displayName : ""), "ok");
+          loadQobuzStatus();
+        } else {
+          showToast(j.error || "Qobuz connect failed", "error");
+        }
+      } catch (e) {
+        showToast("Failed: " + e.message, "error");
+      } finally {
+        qobuzConnect.disabled = false;
+      }
+    });
+  }
+
+  if (qobuzDisconnect) {
+    qobuzDisconnect.addEventListener("click", async () => {
+      qobuzDisconnect.disabled = true;
+      try {
+        await fetch("/api/settings/qobuz/disconnect", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: "{}"
+        });
+        showToast("Qobuz disconnected", "ok");
+        loadQobuzStatus();
+      } catch (e) {
+        showToast("Failed: " + e.message, "error");
+      } finally {
+        qobuzDisconnect.disabled = false;
+      }
+    });
+  }
+
+  const open = () => { loadRadio(); loadVersion(); loadDiscogsToken(); loadFanartKey(); loadQobuzStatus(); overlay.classList.remove("hidden"); };
   const close = () => overlay.classList.add("hidden");
 
   openBtn.addEventListener("click", open);
@@ -2968,6 +3037,226 @@
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !overlay.classList.contains("hidden")) close();
+  });
+})();
+
+/* ------------------------------------------------------------------ */
+/*  Qobuz New Releases — self-contained overlay (browse + favourite)   */
+/*  Isolated from the album grid / labels / filters; uses only the     */
+/*  Qobuz API endpoints and window.__showToast.                        */
+/* ------------------------------------------------------------------ */
+(function initQobuzNewReleases() {
+  const btn      = document.getElementById("qobuz-toggle");
+  const overlay  = document.getElementById("qobuz-overlay");
+  const listEl   = document.getElementById("qobuz-nr-list");
+  const statusEl = document.getElementById("qobuz-nr-status");
+  const detailEl = document.getElementById("qobuz-nr-detail");
+  if (!btn || !overlay) return;
+
+  const toast = (msg, kind) => { if (window.__showToast) window.__showToast(msg, kind); };
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
+    c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  const overlayVisible = () => !overlay.classList.contains("hidden");
+  const detailVisible  = () => !!detailEl && !detailEl.classList.contains("hidden");
+
+  // Fully hide the overlay (and any open detail).
+  function hideOverlay() {
+    overlay.classList.add("hidden");
+    if (detailEl) { detailEl.classList.add("hidden"); detailEl.innerHTML = ""; detailEl.dataset.albumId = ""; }
+  }
+
+  // All back/close affordances (× button, backdrop, ‹ Back, Esc) step back one
+  // history level via history.back(), which the popstate handler turns into
+  // detail → list → closed. This also makes the Android/browser back button
+  // behave naturally instead of leaving the page.
+  const goBack = () => history.back();
+
+  overlay.querySelectorAll("[data-qobuz-close]").forEach(el => el.addEventListener("click", goBack));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && overlayVisible()) goBack();
+  });
+
+  // Browser / Android back: while the overlay is open, unwind detail→list→closed
+  // rather than navigating away. No-op when the overlay isn't open, so the rest
+  // of the app (which uses no history state) is unaffected.
+  window.addEventListener("popstate", () => {
+    if (!overlayVisible()) return;
+    if (detailVisible()) showList();
+    else hideOverlay();
+  });
+
+  // Reflect favourite state on a button (added = in the user's Qobuz library).
+  function setFavState(button, added) {
+    button.dataset.fav = added ? "1" : "0";
+    button.textContent = added ? "✓ Added" : "♥ Favourite";
+    button.classList.toggle("is-done", added);
+  }
+
+  // Toggle favourite/un-favourite against Qobuz, updating every button that
+  // represents this album (the list row and, if open, the detail view) so they
+  // stay in sync. `buttons` may be a single button or an array.
+  async function toggleFavourite(albumId, buttons) {
+    const btns = (Array.isArray(buttons) ? buttons : [buttons]).filter(Boolean);
+    if (!btns.length) return;
+    const wasAdded = btns[0].dataset.fav === "1";
+    const prev = btns.map(b => b.textContent);
+    btns.forEach(b => { b.disabled = true; b.textContent = "…"; });
+    try {
+      const r = await fetch(wasAdded ? "/api/qobuz/unfavorite" : "/api/qobuz/favorite", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ album_id: albumId })
+      });
+      const j = await r.json();
+      if (j.ok) {
+        btns.forEach(b => setFavState(b, !wasAdded));
+        toast(wasAdded ? "Removed from Qobuz favourites" : "Added to Qobuz favourites", "ok");
+      } else {
+        btns.forEach((b, i) => { b.textContent = prev[i]; });
+        toast(j.error || "Couldn't update favourite", "error");
+      }
+    } catch (e) {
+      btns.forEach((b, i) => { b.textContent = prev[i]; });
+      toast("Failed: " + e.message, "error");
+    } finally {
+      btns.forEach(b => { b.disabled = false; });
+    }
+  }
+
+  // Return from the album detail view to the releases list.
+  function showList() {
+    if (detailEl) { detailEl.classList.add("hidden"); detailEl.innerHTML = ""; detailEl.dataset.albumId = ""; }
+    if (listEl) listEl.classList.remove("hidden");
+    if (statusEl) statusEl.classList.remove("hidden");
+  }
+
+  // Open an isolated detail view for a Qobuz album: artwork, editorial review
+  // (fetched by title+artist via /api/album/extras — no Roon needed), and a
+  // favourite toggle kept in sync with the originating list row's button.
+  async function openDetail(album, rowFavBtn) {
+    if (!detailEl) return;
+    detailEl.innerHTML = "";
+    detailEl.dataset.albumId = album.id;
+
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "qobuz-nr-back";
+    back.textContent = "‹ Back";
+    back.addEventListener("click", goBack);
+
+    const head = document.createElement("div");
+    head.className = "qobuz-nr-detail-head";
+    head.innerHTML =
+      (album.image
+        ? '<img class="qobuz-nr-detail-art" alt="" src="' + esc(album.image) + '">'
+        : '<div class="qobuz-nr-detail-art"></div>') +
+      '<div class="qobuz-nr-detail-meta">' +
+        '<div class="qobuz-nr-detail-title">'  + esc(album.title)  + '</div>' +
+        '<div class="qobuz-nr-detail-artist">' + esc(album.artist) + '</div>' +
+        (album.release_date ? '<div class="qobuz-nr-date">' + esc(album.release_date) + '</div>' : '') +
+      '</div>';
+
+    const favBtn = document.createElement("button");
+    favBtn.type = "button";
+    favBtn.className = "qobuz-nr-fav";
+    setFavState(favBtn, rowFavBtn && rowFavBtn.dataset.fav === "1");
+    favBtn.addEventListener("click", () => toggleFavourite(album.id, [favBtn, rowFavBtn]));
+
+    const review = document.createElement("div");
+    review.className = "qobuz-nr-review";
+    review.textContent = "Loading review…";
+
+    detailEl.appendChild(back);
+    detailEl.appendChild(head);
+    detailEl.appendChild(favBtn);
+    detailEl.appendChild(review);
+
+    if (listEl) listEl.classList.add("hidden");
+    if (statusEl) statusEl.classList.add("hidden");
+    detailEl.classList.remove("hidden");
+    history.pushState({ qz: "detail" }, ""); // so back returns to the list, not the wall
+
+    try {
+      const params = new URLSearchParams({ title: album.title || "", artist: album.artist || "" });
+      const r = await fetch("/api/album/extras?" + params.toString());
+      const j = await r.json().catch(() => ({}));
+      // Guard against a fast back→open switching the detail to another album.
+      if (detailEl.dataset.albumId !== String(album.id)) return;
+      const alb = j && j.album;
+      const desc = alb && alb.description;
+      review.innerHTML = "";
+      if (desc) {
+        const p = document.createElement("div");
+        p.className = "qobuz-nr-review-text";
+        p.textContent = desc;
+        review.appendChild(p);
+        if (alb.url && alb.source) {
+          const link = document.createElement("a");
+          link.className = "qobuz-nr-review-src";
+          link.href = alb.url; link.target = "_blank"; link.rel = "noopener";
+          link.textContent = "View on " + alb.source;
+          review.appendChild(link);
+        }
+      } else {
+        review.textContent = "No review available for this release.";
+      }
+    } catch (e) {
+      if (detailEl.dataset.albumId === String(album.id)) review.textContent = "Couldn't load review.";
+    }
+  }
+
+  async function load() {
+    showList(); // reset to the list (in case a detail view was open)
+    if (statusEl) statusEl.textContent = "Loading new releases…";
+    if (listEl) listEl.innerHTML = "";
+    try {
+      const r = await fetch("/api/qobuz/new-releases?days=30");
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+      const albums = j.albums || [];
+      if (statusEl) statusEl.textContent = albums.length
+        ? (albums.length + " releases in the last " + (j.days || 30) + " days")
+        : ("No new releases found in the last " + (j.days || 30) + " days.");
+      const frag = document.createDocumentFragment();
+      for (const a of albums) {
+        const row = document.createElement("div");
+        row.className = "qobuz-nr-row";
+        const art = a.image
+          ? '<img class="qobuz-nr-art" loading="lazy" alt="" src="' + esc(a.image) + '">'
+          : '<div class="qobuz-nr-art"></div>';
+        const date = a.release_date ? '<div class="qobuz-nr-date">' + esc(a.release_date) + '</div>' : '';
+        row.innerHTML = art +
+          '<div class="qobuz-nr-meta">' +
+            '<div class="qobuz-nr-title">'  + esc(a.title)  + '</div>' +
+            '<div class="qobuz-nr-artist">' + esc(a.artist) + '</div>' +
+            date +
+          '</div>';
+        const fav = document.createElement("button");
+        fav.type = "button";
+        fav.className = "qobuz-nr-fav";
+        // Tappable toggle: "✓ Added" (in library) ⇄ "♥ Favourite". Initial state
+        // reflects the user's current Qobuz favourites (added here or elsewhere).
+        setFavState(fav, !!a.favourited);
+        fav.addEventListener("click", (e) => { e.stopPropagation(); toggleFavourite(a.id, fav); });
+        row.appendChild(fav);
+        // Tapping the row (anywhere but the favourite button) opens the detail view.
+        row.addEventListener("click", () => openDetail(a, fav));
+        frag.appendChild(row);
+      }
+      if (listEl) listEl.appendChild(frag);
+    } catch (e) {
+      const notConnected = /not connected/i.test(e.message);
+      if (statusEl) statusEl.textContent = notConnected
+        ? "Connect your Qobuz account in Settings to see new releases."
+        : ("Couldn't load: " + e.message);
+    }
+  }
+
+  btn.addEventListener("click", () => {
+    if (overlayVisible()) return;
+    history.pushState({ qz: "list" }, ""); // a back press from the list closes the overlay
+    overlay.classList.remove("hidden");
+    load();
   });
 })();
 

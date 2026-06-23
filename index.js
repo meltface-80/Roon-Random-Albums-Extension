@@ -423,6 +423,28 @@ async function navigateToAlbumList(sessionKey, filter) {
 async function pickRandomAlbums(count, filter) {
   const sessionKey = "rra_pick_" + Math.random().toString(36).slice(2, 10);
 
+  // Decade filter has no Roon list to navigate — pick from the in-memory album
+  // index filtered by the release year collected during scanning. Each record's
+  // `offset` is its full-library position (resolved on open via filter=null).
+  if (filter && filter.type === "decade") {
+    const decade = parseInt(filter.value, 10); // "1990s" → 1990
+    if (!Number.isFinite(decade)) return { albums: [], total: 0 };
+    const matches = [];
+    for (const al of albumIndex.albums) {
+      const y = parseInt(albumYearCache.get(normalize(al.title) + "||" + normalize(al.subtitle)) || "", 10);
+      if (Number.isFinite(y) && y >= decade && y < decade + 10) matches.push(al);
+    }
+    if (!matches.length) return { albums: [], total: 0 };
+    const want = Math.min(count, matches.length);
+    const picked = new Set();
+    while (picked.size < want) picked.add(Math.floor(Math.random() * matches.length));
+    const albums = [...picked].map(i => {
+      const al = matches[i];
+      return { offset: al.offset, title: al.title || "", subtitle: al.subtitle || "", image_key: al.image_key || null };
+    });
+    return { albums, total: matches.length };
+  }
+
   const nav = await navigateToAlbumList(sessionKey, filter || null);
   const total = nav.total;
   if (total === 0) return { albums: [], total: 0 };
@@ -487,8 +509,11 @@ async function openAlbumByOffset(offset, zoneOrOutputId, invokeKind, filter) {
   const sessionKey = "rra_open_" + Math.random().toString(36).slice(2, 10);
 
   // 1) Navigate to the album list this offset belongs to (full library, or a
-  //    genre/tag list when a filter is active — offsets are per-list).
-  const nav = await navigateToAlbumList(sessionKey, filter || null);
+  //    genre/tag list when a filter is active — offsets are per-list). Decade
+  //    offsets are full-library positions, so resolve them against the full
+  //    library (no Roon list exists for a decade).
+  const navFilter = (filter && filter.type === "decade") ? null : (filter || null);
+  const nav = await navigateToAlbumList(sessionKey, navFilter);
   const hierarchy = nav.hierarchy;
 
   // 2) Re-resolve THIS session's item_key for the album at `offset`
@@ -685,14 +710,24 @@ const _persisted = loadPersistedSettings();
 let discogsToken = _persisted.discogsToken || "";
 let fanartKey    = _persisted.fanartKey    || "";
 
+// Qobuz (UNOFFICIAL API — see lib/qobuz.js). Credentials/token set via Settings.
+// We persist the username, the md5 of the password (for silent re-login), the
+// user_auth_token, and the display name. Never the plaintext password.
+const qobuz = require("./lib/qobuz");
+let qobuzUsername    = _persisted.qobuzUsername    || "";
+let qobuzPasswordMd5 = _persisted.qobuzPasswordMd5 || "";
+let qobuzToken       = _persisted.qobuzToken       || "";
+let qobuzDisplayName = _persisted.qobuzDisplayName || "";
+
 // In-memory Maps — primary lookup path.
 const labelDiskCache = new Map();  // album key → label name
 const labelMbidCache = new Map();  // group key → MusicBrainz MBID
 const labelLogoCache = new Map();  // group key → logo URL | null (null = tried, not found)
 const labelMerges    = new Map();  // source groupKey → { targetKey, targetDisplay, sourceDisplay }
+const albumYearCache = new Map();  // album key → release year (4-digit string) — powers the Decade filter
 
 let labelsDb = null;
-let stmtInsertName, stmtInsertMbid, stmtInsertLogo, stmtInsertMerge, stmtDeleteMerge;
+let stmtInsertName, stmtInsertMbid, stmtInsertLogo, stmtInsertMerge, stmtDeleteMerge, stmtInsertYear;
 let stmtInsertPlay, stmtCompletePlay;
 
 // Non-label filter — must be defined before openLabelsDb() is called.
@@ -740,6 +775,10 @@ function openLabelsDb() {
         target_key     TEXT NOT NULL,
         target_display TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS album_years (
+        key  TEXT PRIMARY KEY,
+        year TEXT NOT NULL
+      );
     `);
     stmtInsertName  = labelsDb.prepare("INSERT OR REPLACE INTO label_names (key, label) VALUES (?, ?)");
     stmtInsertMbid  = labelsDb.prepare("INSERT OR REPLACE INTO label_mbids (group_key, mbid) VALUES (?, ?)");
@@ -748,6 +787,7 @@ function openLabelsDb() {
     stmtDeleteMerge = labelsDb.prepare("DELETE FROM label_merges WHERE source_key = ?");
     stmtInsertPlay  = labelsDb.prepare("INSERT INTO plays (ts, zone, track, artist, album, image_key, duration) VALUES (?,?,?,?,?,?,?)");
     stmtCompletePlay = labelsDb.prepare("UPDATE plays SET completed=1 WHERE id=?");
+    stmtInsertYear  = labelsDb.prepare("INSERT OR REPLACE INTO album_years (key, year) VALUES (?, ?)");
     const stmtDeleteName = labelsDb.prepare("DELETE FROM label_names WHERE key = ?");
     for (const r of labelsDb.prepare("SELECT key, label FROM label_names").all()) {
       if (!r.label) continue;
@@ -766,6 +806,9 @@ function openLabelsDb() {
     }
     for (const r of labelsDb.prepare("SELECT source_key, source_display, target_key, target_display FROM label_merges").all()) {
       labelMerges.set(r.source_key, { targetKey: r.target_key, targetDisplay: r.target_display, sourceDisplay: r.source_display });
+    }
+    for (const r of labelsDb.prepare("SELECT key, year FROM album_years").all()) {
+      if (r.year) albumYearCache.set(r.key, r.year);
     }
     migrateOldJsonCaches();
     if (DEBUG) console.log(
@@ -845,6 +888,13 @@ function setLabelMbid(groupKey, mbid) {
 function setLabelLogo(groupKey, logoUrl) {
   labelLogoCache.set(groupKey, logoUrl);
   if (labelsDb) stmtInsertLogo.run(groupKey, logoUrl);
+}
+// Persist a release year for an album key (4-digit). Powers the Decade filter.
+function setAlbumYear(key, year) {
+  const y = String(year || "").slice(0, 4);
+  if (!/^\d{4}$/.test(y)) return; // only store a plausible 4-digit year
+  albumYearCache.set(key, y);
+  if (labelsDb && stmtInsertYear) stmtInsertYear.run(key, y);
 }
 
 openLabelsDb();
@@ -1071,7 +1121,9 @@ async function fetchLabelFromMusicBrainz(title, artist) {
       const li = (r["label-info"] || [])[0];
       const labelObj = li && li.label;
       if (labelObj && labelObj.name) {
-        return { label: labelObj.name, mbid: labelObj.id || null };
+        // Year comes free from the same release object — no extra request.
+        const year = (r.date && /^\d{4}/.test(r.date)) ? r.date.slice(0, 4) : null;
+        return { label: labelObj.name, mbid: labelObj.id || null, year };
       }
     }
   } catch (e) {
@@ -1225,6 +1277,13 @@ async function buildFileLabelMap(onProgress) {
         if (label && !isLikelyNotALabel(label) && album) {
           const key = normalize(album) + "||" + normalize(albumartist || "");
           if (!map.has(key)) map.set(key, label);
+        }
+        // Capture the release year from file tags too (powers the Decade filter).
+        const fyear = meta.common.year
+          || String(meta.common.originaldate || meta.common.date || "").slice(0, 4);
+        if (album && fyear) {
+          const ykey = normalize(album) + "||" + normalize(albumartist || "");
+          if (!albumYearCache.has(ykey)) setAlbumYear(ykey, fyear);
         }
       } catch (e) { /* unreadable — skip */ }
     }
@@ -1448,6 +1507,7 @@ async function runLabelsIndexScan() {
       const key = normalize(al.title) + "||" + normalize(al.subtitle);
       try {
         const q = await fetchQobuz(al.title, al.subtitle);
+        if (q && q.year && !albumYearCache.has(key)) setAlbumYear(key, q.year);
         if (q && q.label && !isLikelyNotALabel(q.label)) { await saveLabelEntry(key, q.label, null, al); qobuzConsec = 0; }
         else { needsTadb.push(al); qobuzConsec = 0; }
       } catch (e) {
@@ -1542,7 +1602,11 @@ async function runLabelsIndexScan() {
     const key = normalize(al.title) + "||" + normalize(al.subtitle);
     try {
       const mbResult = await fetchLabelFromMusicBrainz(al.title, al.subtitle);
-      if (mbResult) { await saveLabelEntry(key, mbResult.label, mbResult.mbid, al); mbConsec = 0; }
+      if (mbResult) {
+        await saveLabelEntry(key, mbResult.label, mbResult.mbid, al);
+        if (mbResult.year && !albumYearCache.has(key)) setAlbumYear(key, mbResult.year);
+        mbConsec = 0;
+      }
       else { needsDiscogs.push(al); mbConsec = 0; }
     } catch (e) {
       mbErrors++;
@@ -2535,9 +2599,25 @@ function parseFilter(src) {
   const type  = (src.filter_type  || "").trim();
   const value = (src.filter_value || "").trim();
   if (!type || !value) return null;
-  if (type !== "genre" && type !== "tag" && type !== "label") return null;
+  if (type !== "genre" && type !== "tag" && type !== "label" && type !== "decade") return null;
   return { type, value };
 }
+
+// Decades that actually have albums, from the per-album years collected during
+// scanning / browsing. Purely in-memory (no Roon call); populates gradually.
+app.get("/api/filters/decades", (req, res) => {
+  const counts = new Map();
+  for (const year of albumYearCache.values()) {
+    const y = parseInt(year, 10);
+    if (!Number.isFinite(y)) continue;
+    const d = Math.floor(y / 10) * 10;
+    counts.set(d, (counts.get(d) || 0) + 1);
+  }
+  const decades = [...counts.entries()]
+    .sort((a, b) => b[0] - a[0]) // newest first
+    .map(([d, n]) => ({ title: d + "s", subtitle: n.toLocaleString() + (n === 1 ? " album" : " albums") }));
+  res.json({ decades });
+});
 
 app.get("/api/artist-albums", (req, res) => {
   const artist = (req.query.artist || "").trim();
@@ -3112,6 +3192,141 @@ app.post("/api/settings/fanart-key", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Qobuz (UNOFFICIAL API) — new releases + add-to-favourites only. See lib/qobuz.js.
+// Uses the LMS/Lyrion Qobuz plugin's app_id; against Qobuz ToS; user's own
+// account; no streaming/downloading (Roon streams). Use at your own risk.
+// ---------------------------------------------------------------------------
+
+// Re-login with the stored username + md5 password, refreshing the token.
+async function qobuzRelogin() {
+  const r = await qobuz.login(qobuzUsername, qobuzPasswordMd5, true);
+  qobuzToken = r.token;
+  qobuzDisplayName = r.displayName;
+  savePersistedSettings({ qobuzToken, qobuzDisplayName });
+}
+
+// Run an authenticated Qobuz call; on a 401 (expired token), re-login once and
+// retry. Throws a "not connected" error if no credentials are stored.
+async function qobuzWithToken(fn) {
+  if (!qobuzToken && qobuzUsername && qobuzPasswordMd5) await qobuzRelogin();
+  if (!qobuzToken) throw new Error("Qobuz not connected — add your Qobuz login in Settings");
+  try {
+    return await fn(qobuzToken);
+  } catch (e) {
+    if (e && e.code === 401 && qobuzUsername && qobuzPasswordMd5) {
+      await qobuzRelogin();
+      return await fn(qobuzToken);
+    }
+    throw e;
+  }
+}
+
+// Best-effort release timestamp (ms) from a Qobuz album object.
+function qobuzReleaseTs(a) {
+  if (a.released_at && Number.isFinite(a.released_at)) return a.released_at * 1000;
+  const d = a.release_date_original || a.release_date_stream || a.release_date_download;
+  if (d) {
+    const t = Date.parse(d);
+    if (Number.isFinite(t)) return t;
+  }
+  return null;
+}
+
+// Connection status (never returns credentials).
+app.get("/api/settings/qobuz", (req, res) => {
+  res.json({ connected: !!qobuzToken, username: qobuzUsername || "", displayName: qobuzDisplayName || "" });
+});
+// Connect: log in with email/password, persist token (+ md5 for re-login).
+app.post("/api/settings/qobuz", async (req, res) => {
+  const username = ((req.body && req.body.username) || "").trim();
+  const password = ((req.body && req.body.password) || "");
+  if (!username || !password) return res.status(400).json({ ok: false, error: "username and password required" });
+  try {
+    const r = await qobuz.login(username, password);
+    qobuzUsername    = username;
+    qobuzPasswordMd5 = r.passwordMd5;
+    qobuzToken       = r.token;
+    qobuzDisplayName = r.displayName;
+    savePersistedSettings({ qobuzUsername, qobuzPasswordMd5, qobuzToken, qobuzDisplayName });
+    console.log("[settings] qobuz connected as " + qobuzDisplayName);
+    res.json({ ok: true, displayName: qobuzDisplayName });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e.message });
+  }
+});
+// Disconnect: clear all stored Qobuz credentials/token.
+app.post("/api/settings/qobuz/disconnect", (req, res) => {
+  qobuzUsername = qobuzPasswordMd5 = qobuzToken = qobuzDisplayName = "";
+  savePersistedSettings({ qobuzUsername: "", qobuzPasswordMd5: "", qobuzToken: "", qobuzDisplayName: "" });
+  res.json({ ok: true });
+});
+
+// New releases from the last N days (default 30), newest first.
+app.get("/api/qobuz/new-releases", async (req, res) => {
+  let days = parseInt(req.query.days, 10);
+  if (!Number.isFinite(days) || days <= 0 || days > 365) days = 30;
+  try {
+    const items = await qobuzWithToken(t => qobuz.getFeaturedAlbums(t, "new-releases-full", 150));
+    // Which of these are already in the user's Qobuz favourites (any device).
+    // Best-effort: if this fails (e.g. 429), the list still renders without it.
+    let favIds = new Set();
+    try {
+      favIds = await qobuzWithToken(t => qobuz.getFavoriteAlbumIds(t));
+    } catch (e) {
+      if (DEBUG) console.error("[qobuz] favourite-ids lookup failed:", e.message);
+    }
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const future = Date.now() + 2 * 24 * 60 * 60 * 1000; // tolerate a couple days' skew
+    const albums = [];
+    for (const a of items) {
+      if (!a || !a.id) continue;
+      const ts = qobuzReleaseTs(a);
+      if (ts !== null && (ts < cutoff || ts > future)) continue; // outside the window
+      albums.push({
+        id:           String(a.id),
+        title:        a.title || "",
+        artist:       (a.artist && a.artist.name) || (a.performer && a.performer.name) || "",
+        image:        (a.image && (a.image.large || a.image.small || a.image.thumbnail)) || null,
+        released_at:  ts,
+        release_date: a.release_date_original || null,
+        favourited:   favIds.has(String(a.id))
+      });
+    }
+    albums.sort((x, y) => (y.released_at || 0) - (x.released_at || 0));
+    res.json({ albums, days });
+  } catch (e) {
+    const code = e && e.code === 429 ? 429 : (/not connected/i.test(e.message) ? 400 : 502);
+    res.status(code).json({ error: e.message });
+  }
+});
+
+// Add an album to the user's Qobuz favourites (idempotent).
+app.post("/api/qobuz/favorite", async (req, res) => {
+  const albumId = ((req.body && req.body.album_id) || "").toString().trim();
+  if (!albumId) return res.status(400).json({ ok: false, error: "album_id required" });
+  try {
+    await qobuzWithToken(t => qobuz.favoriteAlbum(t, albumId));
+    res.json({ ok: true });
+  } catch (e) {
+    const code = e && e.code === 429 ? 429 : (/not connected/i.test(e.message) ? 400 : 502);
+    res.status(code).json({ ok: false, error: e.message });
+  }
+});
+
+// Remove an album from the user's Qobuz favourites (idempotent).
+app.post("/api/qobuz/unfavorite", async (req, res) => {
+  const albumId = ((req.body && req.body.album_id) || "").toString().trim();
+  if (!albumId) return res.status(400).json({ ok: false, error: "album_id required" });
+  try {
+    await qobuzWithToken(t => qobuz.unfavoriteAlbum(t, albumId));
+    res.json({ ok: true });
+  } catch (e) {
+    const code = e && e.code === 429 ? 429 : (/not connected/i.test(e.message) ? 400 : 502);
+    res.status(code).json({ ok: false, error: e.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Library search (instant, prefix-aware, typo-tolerant — see albumIndex above)
 // ---------------------------------------------------------------------------
 
@@ -3350,6 +3565,11 @@ app.get("/api/album/extras", async (req, res) => {
       fetchAlbumYear(title, artist),
       fetchAlbumBios(title, artist)
     ]);
+    // Opportunistically record the year so it feeds the Decade filter too.
+    if (year) {
+      const exKey = normalize(title) + "||" + normalize(artist);
+      if (!albumYearCache.has(exKey)) setAlbumYear(exKey, year);
+    }
     // Prefer MusicBrainz's first-release year (the album's original release)
     // over Qobuz's edition date, which can be a later reissue.
     if (bios && bios.album && year) bios.album.year = year;
