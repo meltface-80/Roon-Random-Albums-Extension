@@ -3196,6 +3196,14 @@ app.get("/api/qobuz/new-releases", async (req, res) => {
   if (!Number.isFinite(days) || days <= 0 || days > 365) days = 30;
   try {
     const items = await qobuzWithToken(t => qobuz.getFeaturedAlbums(t, "new-releases-full", 150));
+    // Which of these are already in the user's Qobuz favourites (any device).
+    // Best-effort: if this fails (e.g. 429), the list still renders without it.
+    let favIds = new Set();
+    try {
+      favIds = await qobuzWithToken(t => qobuz.getFavoriteAlbumIds(t));
+    } catch (e) {
+      if (DEBUG) console.error("[qobuz] favourite-ids lookup failed:", e.message);
+    }
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
     const future = Date.now() + 2 * 24 * 60 * 60 * 1000; // tolerate a couple days' skew
     const albums = [];
@@ -3209,7 +3217,8 @@ app.get("/api/qobuz/new-releases", async (req, res) => {
         artist:       (a.artist && a.artist.name) || (a.performer && a.performer.name) || "",
         image:        (a.image && (a.image.large || a.image.small || a.image.thumbnail)) || null,
         released_at:  ts,
-        release_date: a.release_date_original || null
+        release_date: a.release_date_original || null,
+        favourited:   favIds.has(String(a.id))
       });
     }
     albums.sort((x, y) => (y.released_at || 0) - (x.released_at || 0));

@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.80] — 2026-06-23
+
+### Fixed
+- **Qobuz new releases now show your existing favourites as "✓ Added"** — previously the new-releases overlay only marked an album Added if you favourited it in that same browser session, so albums already in your Qobuz library (or favourited on another device) still showed "♥ Favourite", and the state differed between devices. The list now fetches your current Qobuz favourite album IDs (`favorite/getUserFavoriteIds`) on load and marks any already-favourited release as a disabled "✓ Added" — consistent across all devices. The lookup is best-effort: if it fails, the list still renders with everything clickable.
+
 ## [1.5.79] — 2026-06-23
 
 ### Added

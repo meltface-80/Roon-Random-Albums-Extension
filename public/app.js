@@ -3107,8 +3107,15 @@
         const fav = document.createElement("button");
         fav.type = "button";
         fav.className = "qobuz-nr-fav";
-        fav.textContent = "♥ Favourite";
-        fav.addEventListener("click", () => favourite(a.id, fav));
+        if (a.favourited) {
+          // Already in the user's Qobuz library (added here or on another device).
+          fav.textContent = "✓ Added";
+          fav.classList.add("is-done");
+          fav.disabled = true;
+        } else {
+          fav.textContent = "♥ Favourite";
+          fav.addEventListener("click", () => favourite(a.id, fav));
+        }
         row.appendChild(fav);
         frag.appendChild(row);
       }
