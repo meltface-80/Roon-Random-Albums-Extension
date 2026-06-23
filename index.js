@@ -685,6 +685,15 @@ const _persisted = loadPersistedSettings();
 let discogsToken = _persisted.discogsToken || "";
 let fanartKey    = _persisted.fanartKey    || "";
 
+// Qobuz (UNOFFICIAL API — see lib/qobuz.js). Credentials/token set via Settings.
+// We persist the username, the md5 of the password (for silent re-login), the
+// user_auth_token, and the display name. Never the plaintext password.
+const qobuz = require("./lib/qobuz");
+let qobuzUsername    = _persisted.qobuzUsername    || "";
+let qobuzPasswordMd5 = _persisted.qobuzPasswordMd5 || "";
+let qobuzToken       = _persisted.qobuzToken       || "";
+let qobuzDisplayName = _persisted.qobuzDisplayName || "";
+
 // In-memory Maps — primary lookup path.
 const labelDiskCache = new Map();  // album key → label name
 const labelMbidCache = new Map();  // group key → MusicBrainz MBID
@@ -3109,6 +3118,119 @@ app.post("/api/settings/fanart-key", (req, res) => {
   const saved = savePersistedSettings({ fanartKey: key });
   console.log("[settings] fanart key set (" + key.length + " chars), persisted=" + saved);
   res.json({ ok: true, saved });
+});
+
+// ---------------------------------------------------------------------------
+// Qobuz (UNOFFICIAL API) — new releases + add-to-favourites only. See lib/qobuz.js.
+// Uses the LMS/Lyrion Qobuz plugin's app_id; against Qobuz ToS; user's own
+// account; no streaming/downloading (Roon streams). Use at your own risk.
+// ---------------------------------------------------------------------------
+
+// Re-login with the stored username + md5 password, refreshing the token.
+async function qobuzRelogin() {
+  const r = await qobuz.login(qobuzUsername, qobuzPasswordMd5, true);
+  qobuzToken = r.token;
+  qobuzDisplayName = r.displayName;
+  savePersistedSettings({ qobuzToken, qobuzDisplayName });
+}
+
+// Run an authenticated Qobuz call; on a 401 (expired token), re-login once and
+// retry. Throws a "not connected" error if no credentials are stored.
+async function qobuzWithToken(fn) {
+  if (!qobuzToken && qobuzUsername && qobuzPasswordMd5) await qobuzRelogin();
+  if (!qobuzToken) throw new Error("Qobuz not connected — add your Qobuz login in Settings");
+  try {
+    return await fn(qobuzToken);
+  } catch (e) {
+    if (e && e.code === 401 && qobuzUsername && qobuzPasswordMd5) {
+      await qobuzRelogin();
+      return await fn(qobuzToken);
+    }
+    throw e;
+  }
+}
+
+// Best-effort release timestamp (ms) from a Qobuz album object.
+function qobuzReleaseTs(a) {
+  if (a.released_at && Number.isFinite(a.released_at)) return a.released_at * 1000;
+  const d = a.release_date_original || a.release_date_stream || a.release_date_download;
+  if (d) {
+    const t = Date.parse(d);
+    if (Number.isFinite(t)) return t;
+  }
+  return null;
+}
+
+// Connection status (never returns credentials).
+app.get("/api/settings/qobuz", (req, res) => {
+  res.json({ connected: !!qobuzToken, username: qobuzUsername || "", displayName: qobuzDisplayName || "" });
+});
+// Connect: log in with email/password, persist token (+ md5 for re-login).
+app.post("/api/settings/qobuz", async (req, res) => {
+  const username = ((req.body && req.body.username) || "").trim();
+  const password = ((req.body && req.body.password) || "");
+  if (!username || !password) return res.status(400).json({ ok: false, error: "username and password required" });
+  try {
+    const r = await qobuz.login(username, password);
+    qobuzUsername    = username;
+    qobuzPasswordMd5 = r.passwordMd5;
+    qobuzToken       = r.token;
+    qobuzDisplayName = r.displayName;
+    savePersistedSettings({ qobuzUsername, qobuzPasswordMd5, qobuzToken, qobuzDisplayName });
+    console.log("[settings] qobuz connected as " + qobuzDisplayName);
+    res.json({ ok: true, displayName: qobuzDisplayName });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e.message });
+  }
+});
+// Disconnect: clear all stored Qobuz credentials/token.
+app.post("/api/settings/qobuz/disconnect", (req, res) => {
+  qobuzUsername = qobuzPasswordMd5 = qobuzToken = qobuzDisplayName = "";
+  savePersistedSettings({ qobuzUsername: "", qobuzPasswordMd5: "", qobuzToken: "", qobuzDisplayName: "" });
+  res.json({ ok: true });
+});
+
+// New releases from the last N days (default 30), newest first.
+app.get("/api/qobuz/new-releases", async (req, res) => {
+  let days = parseInt(req.query.days, 10);
+  if (!Number.isFinite(days) || days <= 0 || days > 365) days = 30;
+  try {
+    const items = await qobuzWithToken(t => qobuz.getFeaturedAlbums(t, "new-releases-full", 150));
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const future = Date.now() + 2 * 24 * 60 * 60 * 1000; // tolerate a couple days' skew
+    const albums = [];
+    for (const a of items) {
+      if (!a || !a.id) continue;
+      const ts = qobuzReleaseTs(a);
+      if (ts !== null && (ts < cutoff || ts > future)) continue; // outside the window
+      albums.push({
+        id:           String(a.id),
+        title:        a.title || "",
+        artist:       (a.artist && a.artist.name) || (a.performer && a.performer.name) || "",
+        image:        (a.image && (a.image.large || a.image.small || a.image.thumbnail)) || null,
+        released_at:  ts,
+        release_date: a.release_date_original || null
+      });
+    }
+    albums.sort((x, y) => (y.released_at || 0) - (x.released_at || 0));
+    res.json({ albums, days });
+  } catch (e) {
+    const code = e && e.code === 429 ? 429 : (/not connected/i.test(e.message) ? 400 : 502);
+    res.status(code).json({ error: e.message });
+  }
+});
+
+// Add an album to the user's Qobuz favourites (idempotent).
+app.post("/api/qobuz/favorite", async (req, res) => {
+  const albumId = ((req.body && req.body.album_id) || "").toString().trim();
+  if (!albumId) return res.status(400).json({ ok: false, error: "album_id required" });
+  try {
+    await qobuzWithToken(t => qobuz.favoriteAlbum(t, albumId));
+    res.json({ ok: true });
+  } catch (e) {
+    const code = e && e.code === 429 ? 429 : (/not connected/i.test(e.message) ? 400 : 502);
+    res.status(code).json({ ok: false, error: e.message });
+  }
 });
 
 // ---------------------------------------------------------------------------

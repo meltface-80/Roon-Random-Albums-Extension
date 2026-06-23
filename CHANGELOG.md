@@ -2,6 +2,13 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.79] — 2026-06-23
+
+### Added
+- **Qobuz New Releases + add-to-favourites (pre-release, unofficial API)** — a new `lib/qobuz.js` lite client talks to the Qobuz API (using the LMS/Lyrion Qobuz plugin's `app_id`) to list new releases and add an album to your **own Qobuz favourites/library**. A Qobuz button in the top bar opens a self-contained overlay listing releases from the last 30 days (artwork, title, artist), each with a **♥ Favourite** button that writes straight to Qobuz (and syncs back through Roon). Connect your Qobuz account in Settings (email + password; only the resulting token and an MD5 of the password are stored — never the plaintext). **No streaming or downloading — Roon still does all playback.**
+  - This uses an **unofficial, reverse-engineered Qobuz API** (the same one the LMS plugin uses). It is **against Qobuz's Terms of Service, may break at any time, and is used at your own risk** — clearly noted in Settings.
+  - The new-releases overlay is fully isolated from the album grid / labels / filters, so existing navigation is unaffected. Favouriting is by Qobuz album id straight from the new-releases feed (no fuzzy title/artist search), so there's no edition-mismatch risk.
+
 ## [1.5.78] — 2026-06-23
 
 ### Added

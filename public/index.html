@@ -45,6 +45,15 @@
           </svg>
         </button>
 
+        <button id="qobuz-toggle" class="icon-btn" aria-label="Qobuz new releases" title="Qobuz new releases">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 18V6l10-2v12"/>
+            <circle cx="6" cy="18" r="3"/>
+            <circle cx="16" cy="16" r="3"/>
+          </svg>
+        </button>
+
         <button id="play-unheard-topbar" class="icon-btn" aria-label="Play something unheard">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -449,6 +458,25 @@ sudo systemctl disable roon-random-albums</pre>
   </div>
 
   <!-- Settings bottom sheet -->
+  <!-- Qobuz New Releases overlay (self-contained; does not touch the album grid) -->
+  <div id="qobuz-overlay" class="settings-overlay hidden" role="dialog" aria-modal="true" aria-label="Qobuz New Releases">
+    <div class="settings-backdrop" data-qobuz-close></div>
+    <div class="settings-sheet">
+      <div class="settings-grip"></div>
+      <div class="settings-head">
+        <h2>Qobuz · New Releases</h2>
+        <button id="qobuz-overlay-close" class="icon-btn" type="button" aria-label="Close" data-qobuz-close>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div id="qobuz-nr-status" class="settings-token-status"></div>
+      <div id="qobuz-nr-list" class="qobuz-nr-list"></div>
+    </div>
+  </div>
+
   <div id="settings-overlay" class="settings-overlay hidden" role="dialog" aria-modal="true" aria-label="Settings">
     <div class="settings-backdrop" data-settings-close></div>
     <div class="settings-sheet">
@@ -550,6 +578,24 @@ sudo systemctl disable roon-random-albums</pre>
           <button id="fanart-key-save" class="settings-update-btn" type="button">Save</button>
         </div>
         <div id="fanart-key-status" class="settings-token-status"></div>
+      </div>
+
+      <div class="settings-divider"></div>
+
+      <div class="settings-block">
+        <div class="settings-row">
+          <span class="settings-label">Qobuz account <button class="settings-info-btn" data-info="Connects to Qobuz via the unofficial API (the Lyrion/LMS plugin's app id). Used only to list new releases and add albums to your Qobuz favourites/library — no streaming or downloading (Roon streams). Against Qobuz's Terms of Service and may break at any time. Your password is sent to Qobuz once to obtain a token; only the token is stored, never the plaintext password." aria-label="Info">ⓘ</button></span>
+        </div>
+        <div class="settings-token-row">
+          <input id="qobuz-username-input" type="email" class="settings-token-input" placeholder="Qobuz email…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="settings-token-row">
+          <input id="qobuz-password-input" type="password" class="settings-token-input" placeholder="Qobuz password…" autocomplete="off" spellcheck="false">
+          <button id="qobuz-connect" class="settings-update-btn" type="button">Connect</button>
+        </div>
+        <div id="qobuz-status" class="settings-token-status"></div>
+        <button id="qobuz-disconnect" class="settings-update-btn hidden" type="button">Disconnect</button>
+        <div class="settings-token-status" style="opacity:.6;font-size:11px;margin-top:6px;">Unofficial Qobuz API — against Qobuz ToS, may break, use at your own risk.</div>
       </div>
 
       <div class="settings-divider"></div>
