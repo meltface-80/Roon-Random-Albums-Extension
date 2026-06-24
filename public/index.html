@@ -581,6 +581,17 @@ sudo systemctl disable roon-random-albums</pre>
         <div id="fanart-key-status" class="settings-token-status"></div>
       </div>
 
+      <div class="settings-block">
+        <div class="settings-row">
+          <span class="settings-label">Label from folder depth <button class="settings-info-btn" data-info="For local libraries filed in label folders. 0 = off (use each file's own label tag, the default). Otherwise the label is taken from the folder at this depth under your music root — e.g. /music/Jazz/Blue Note Records/Album is depth 2. Fixes reissues being split off under their pressing label (e.g. an album in your Blue Note folder showing as EMI Finland). Saving re-runs the label scan." aria-label="Info">ⓘ</button></span>
+        </div>
+        <div class="settings-token-row">
+          <input id="label-folder-depth-input" type="number" min="0" max="6" class="settings-token-input" placeholder="0 = off (use file tag)">
+          <button id="label-folder-depth-save" class="settings-update-btn" type="button">Save</button>
+        </div>
+        <div id="label-folder-depth-status" class="settings-token-status"></div>
+      </div>
+
       <div class="settings-divider"></div>
 
       <div class="settings-block">

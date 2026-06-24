@@ -2966,6 +2966,43 @@
     });
   }
 
+  const lfdInput  = document.getElementById("label-folder-depth-input");
+  const lfdSave   = document.getElementById("label-folder-depth-save");
+  const lfdStatus = document.getElementById("label-folder-depth-status");
+
+  async function loadLabelFolderDepth() {
+    try {
+      const r = await fetch("/api/settings/label-folder-depth");
+      const j = await r.json();
+      if (lfdInput && document.activeElement !== lfdInput) lfdInput.value = j.depth || 0;
+      if (lfdStatus) lfdStatus.textContent = j.depth ? ("Using folder depth " + j.depth) : "Off — using file label tags";
+    } catch (_) { /* display-only status — stale on failure is fine */ }
+  }
+
+  if (lfdSave) {
+    lfdSave.addEventListener("click", async () => {
+      const depth = parseInt(lfdInput ? lfdInput.value : "0", 10) || 0;
+      lfdSave.disabled = true;
+      try {
+        const r = await fetch("/api/settings/label-folder-depth", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ depth })
+        });
+        const j = await r.json();
+        if (j.ok) {
+          showToast(j.rescanning ? "Saved — re-scanning labels…" : "Saved", "ok");
+          loadLabelFolderDepth();
+        } else {
+          showToast(j.error || "Failed to save", "error");
+        }
+      } catch (e) {
+        showToast("Failed: " + e.message, "error");
+      } finally {
+        lfdSave.disabled = false;
+      }
+    });
+  }
+
   const qobuzUserInput  = document.getElementById("qobuz-username-input");
   const qobuzPassInput  = document.getElementById("qobuz-password-input");
   const qobuzConnect    = document.getElementById("qobuz-connect");
@@ -3028,7 +3065,7 @@
     });
   }
 
-  const open = () => { loadRadio(); loadVersion(); loadDiscogsToken(); loadFanartKey(); loadQobuzStatus(); overlay.classList.remove("hidden"); };
+  const open = () => { loadRadio(); loadVersion(); loadDiscogsToken(); loadFanartKey(); loadLabelFolderDepth(); loadQobuzStatus(); overlay.classList.remove("hidden"); };
   const close = () => overlay.classList.add("hidden");
 
   openBtn.addEventListener("click", open);

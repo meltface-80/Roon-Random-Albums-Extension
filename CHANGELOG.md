@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.85] — 2026-06-23
+
+### Added
+- **"Label from folder depth" setting — fixes reissues fragmenting under their pressing label** — for local libraries filed in label folders, an album physically in (say) your Blue Note folder could be listed under the granular pressing label from its file tag (e.g. "EMI Finland", "ECM New Series"), because the file scan read each file's `label`/`organization` tag. A new opt-in setting takes the label from the folder at a chosen depth under your music root instead (e.g. `/music/Jazz/Blue Note Records/Album` → depth **2**), so reissues group under the parent label like they do in Roon. `0` = off (use the file tag, the default and prior behaviour). The depth is measured from the music root, so it's unaffected by disc subfolders. Saving a new value re-runs the label scan, and the file pass overrides any cached labels that differ. Only affects local libraries (requires the `/music` mount); inert for streaming-only setups.
+
 ## [1.5.84] — 2026-06-23
 
 ### Added
