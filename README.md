@@ -72,7 +72,7 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   -v roon-random-albums-data:/app/data \
-# remove the below line if you only use Qobuz/Tidal
+# remove the below line (and this line) if you only use Qobuz/Tidal
   -v /your/path/to/Music:/music:ro \
   roon-random-albums:1.5.84
 ```
@@ -108,7 +108,7 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   -v roon-random-albums-data:/app/data \
-# remove the below line if you only use Qobuz/Tidal
+# remove the below line (and this line) if you only use Qobuz/Tidal
   -v /your/path/to/Music:/music:ro \
   roon-random-albums:NEW
 ```
@@ -135,7 +135,7 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   -v roon-random-albums-data:/app/data \
-# remove the below line if you only use Qobuz/Tidal
+# remove the below line (and this line) if you only use Qobuz/Tidal
   -v /your/path/to/Music:/music:ro \
   roon-random-albums:1.5.84
 ```
