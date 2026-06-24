@@ -709,6 +709,12 @@ function savePersistedSettings(patch) {
 const _persisted = loadPersistedSettings();
 let discogsToken = _persisted.discogsToken || "";
 let fanartKey    = _persisted.fanartKey    || "";
+// When > 0, the file scan takes the album's label from the folder at this depth
+// under the music root instead of the per-file label tag — for libraries
+// organised in label folders (e.g. /music/Jazz/Blue Note Records/Album → depth 2).
+// 0 = off (use the file's label tag, the default). Immune to disc subfolders
+// because it's measured from the music root, not the audio folder.
+let labelFolderDepth = parseInt(_persisted.labelFolderDepth, 10) || 0;
 
 // Qobuz (UNOFFICIAL API — see lib/qobuz.js). Credentials/token set via Settings.
 // We persist the username, the md5 of the password (for silent re-login), the
@@ -1269,7 +1275,16 @@ async function buildFileLabelMap(onProgress) {
       if (onProgress && _fsProcessed % 50 === 0) onProgress(_fsProcessed);
       try {
         const meta = await parseFile(path.join(dirPath, audioFile.name), { duration: false, skipCovers: true });
-        const label = (meta.common.label && meta.common.label[0]) || meta.common.organization || null;
+        let label = (meta.common.label && meta.common.label[0]) || meta.common.organization || null;
+        // Label-folder organisation: take the label from the folder at the
+        // configured depth under the music root, overriding the per-file tag
+        // (which is often the granular pressing/reissue label, not the parent
+        // label the user files under). Opt-in; 0 = use the tag (default).
+        if (labelFolderDepth > 0) {
+          const rel = path.relative(MUSIC_DIR, dirPath).split(path.sep).filter(Boolean);
+          const folderLabel = rel[labelFolderDepth - 1];
+          if (folderLabel) label = folderLabel;
+        }
         const album = meta.common.album;
         const albumartist = meta.common.albumartist
           || (meta.common.artists && meta.common.artists[0])
@@ -3189,6 +3204,30 @@ app.post("/api/settings/fanart-key", (req, res) => {
   const saved = savePersistedSettings({ fanartKey: key });
   console.log("[settings] fanart key set (" + key.length + " chars), persisted=" + saved);
   res.json({ ok: true, saved });
+});
+
+// Label-folder depth — for libraries organised in label folders. 0 = off (use
+// the file's label tag). Saving a new value triggers a rescan so the change
+// takes effect (the file pass overrides cached labels that differ).
+app.get("/api/settings/label-folder-depth", (req, res) => {
+  res.json({ depth: labelFolderDepth });
+});
+app.post("/api/settings/label-folder-depth", (req, res) => {
+  const depth = parseInt((req.body && req.body.depth), 10);
+  if (!Number.isFinite(depth) || depth < 0 || depth > 6) {
+    return res.status(400).json({ ok: false, error: "depth must be 0–6" });
+  }
+  const changed = depth !== labelFolderDepth;
+  labelFolderDepth = depth;
+  const saved = savePersistedSettings({ labelFolderDepth: depth });
+  console.log("[settings] label folder depth set to " + depth + ", persisted=" + saved);
+  // Re-run the label scan so file labels are re-derived from folders (or tags).
+  if (changed && core && !labelsIndex.building) {
+    labelsIndex.builtAt = 0;
+    appendLabelsLog("[labels] rescan triggered by label-folder-depth change → " + depth);
+    runLabelsIndexScan().catch(e => { if (DEBUG) console.error("[labels] rescan error:", e.message); });
+  }
+  res.json({ ok: true, saved, rescanning: changed && !!core });
 });
 
 // ---------------------------------------------------------------------------
