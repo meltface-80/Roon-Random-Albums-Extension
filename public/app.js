@@ -840,7 +840,7 @@
       });
       modalSub.appendChild(labelBtn);
     }
-    if (extras.album && extras.album.score != null) {
+    if (extras.album && typeof extras.album.score === "number" && !isNaN(extras.album.score)) {
       const sep = document.createElement("span");
       sep.className = "modal-subtitle-year";
       sep.textContent = " · ";

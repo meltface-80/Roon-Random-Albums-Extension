@@ -2398,7 +2398,7 @@ async function fetchPitchfork(title, artist) {
           description = stripHtml(obj.reviewBody).trim() || null;
           break;
         }
-      } catch (e) { /* malformed block — try next */ }
+      } catch (e) { /* malformed JSON-LD block — try next tag; silence safe as loop continues */ }
     }
 
     // Extract score and BNM flag from inline __PRELOADED_STATE__ via targeted regex
@@ -3805,7 +3805,7 @@ app.get("/api/album/extras", async (req, res) => {
   const artist = String(req.query.artist || "");
   if (!title) return res.status(400).json({ error: "title query parameter required" });
   try {
-    const [year, bios] = await Promise.all([
+    let [year, bios] = await Promise.all([
       fetchAlbumYear(title, artist),
       fetchAlbumBios(title, artist)
     ]);

@@ -2,6 +2,13 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.92] — 2026-06-26
+
+### Fixed
+- **TypeError crash on `/api/album/extras`** — `bios` was declared `const` in a destructured `await Promise.all()` but then conditionally reassigned when `labelDiskCache` held a canonical label for the album. In Node.js strict mode this throws `TypeError: Assignment to constant variable`, returning a 500 for any album whose label had been scanned. Changed to `let`.
+- **NaN score chip** — Pitchfork score guard used `!= null` which passes NaN through; `parseFloat` on a malformed JSON value can return NaN. Changed guard to `typeof score === "number" && !isNaN(score)`.
+- **Silent catch comment** — malformed JSON-LD block catch in `fetchPitchfork` now explicitly notes why silence is safe (loop continues to the next script tag).
+
 ## [1.5.91] — 2026-06-25
 
 ### Added
