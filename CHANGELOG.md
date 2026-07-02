@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.98] — 2026-07-02
+
+### Changed
+- **Qobuz top-bar button now shows the Qobuz "Q" logomark** (open ring, centre dot, diagonal tail — line-style mark from Arcticons, CC BY 4.0) instead of the generic music-note icon, matching the Tidal button's branded diamond mark. Rendered at the same stroke weight as the neighbouring icons (48-unit viewBox with a proportionally scaled 3.6 stroke).
+
 ## [1.5.97] — 2026-07-02
 
 ### Added
