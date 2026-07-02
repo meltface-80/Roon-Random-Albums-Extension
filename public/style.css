@@ -1964,6 +1964,35 @@ main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 }
 .label-unmerge-remove:hover { background: rgba(224,100,100,.12); }
 
+/* Qobuz browser overlay — full-screen, fixed-frame variant of the settings
+   sheet. The sheet's height is viewport-driven, never content-driven, so the
+   frame stays put while results load/clear (no bottom-sheet "ducking" on
+   mobile while typing). Scoped to the Qobuz overlay only — the base
+   .settings-overlay/.settings-sheet rules used by Settings are untouched. */
+#qobuz-overlay { align-items: stretch; }
+#qobuz-overlay .qobuz-sheet {
+  height: 100vh;   /* fallback for browsers without dvh support */
+  height: 100dvh;
+  max-height: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  padding-top: 0; /* the pinned header carries the top padding instead */
+}
+/* Header block (grip, title/close, search box, tab chips) pinned to the top
+   of the sheet's scroll area. The sheet's top padding moves onto the wrapper
+   so pinned content never slides under a notch, and its background hides
+   rows scrolling beneath. The 2px bottom padding stops the tabs' bottom
+   margin collapsing out of the wrapper, so the background covers the full
+   pinned area. */
+#qobuz-overlay .qobuz-pin {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg-elev);
+  padding-top: calc(10px + env(safe-area-inset-top));
+  padding-bottom: 2px;
+}
+
 /* Qobuz New Releases overlay list */
 .qobuz-nr-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding: 4px 0 8px; }
 .qobuz-nr-row {
