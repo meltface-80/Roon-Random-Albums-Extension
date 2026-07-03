@@ -2,6 +2,22 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.104] — 2026-07-03 — Home redesign (phase 2)
+
+### Changed
+- **Album counts removed from every screen** — the topbar breadcrumb now shows just the genre/label name (no "N albums"), the labels list header shows "Labels" (no count), and the library-total line was removed from Settings.
+- **Search moved to the top of the Home screen** — a permanent search box sits above the Home sections instead of living in the side menu. Typing shows results in place of the sections (the box stays put); clearing returns to the sections. The Search item was removed from the side menu.
+- **Play Now no longer closes the album view** — playing (Play Now / Shuffle / Radio) from an album's detail page keeps the page open so you stay on the album.
+- **"Not played in 6 months" fills more of the screen on bigger displays** — single row on phones, **2 rows on landscape tablets**, **3 rows on desktops** (horizontally scrollable), and the section now fetches enough albums to fill them.
+- **"Not played in 6 months" stands out with a coloured panel** — a pale grey panel in dark mode, a soft blue panel in light mode.
+
+### Added
+- **Back-to-Home button** in the top bar, shown on every screen you navigate to from Home (random wall, genre grid, labels).
+- **Refresh (shuffle) button** in the top bar, shown on the random-album and genre grid screens — reshuffles the current grid (keeps the active genre).
+
+### Dev
+- Added `scratchpad/smoke.js` runs to pre-flight — a DOM-stub harness that executes the app's top-level IIFEs and fails on any startup throw (the v1.5.103 crash class).
+
 ## [1.5.103] — 2026-07-03
 
 ### Fixed

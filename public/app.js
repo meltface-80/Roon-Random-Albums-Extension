@@ -197,15 +197,27 @@
 
   // ----- Home landing view -----
   const homeView     = document.getElementById("home-view");
+  const homeSections = document.getElementById("home-sections");
   const homeUnplayed = document.getElementById("home-unplayed");
   const homeGenres   = document.getElementById("home-genres");
+  const topbarBack   = document.getElementById("topbar-back");
+  const topbarRefresh = document.getElementById("topbar-refresh");
   let homeSectionsLoaded = false;
+
+  // Topbar navigation: a Back-to-Home button (shown off Home) and a Refresh
+  // button (shown only on the random / genre album grids).
+  function setTopbarNav(back, refresh) {
+    if (topbarBack)    topbarBack.classList.toggle("hidden", !back);
+    if (topbarRefresh) topbarRefresh.classList.toggle("hidden", !refresh);
+  }
 
   // Show the Home landing (hide the wall). The wall loads lazily when entered.
   function showHome() {
     if (window.__exitLabels) window.__exitLabels();   // leave the labels browser if active
     if (homeView) homeView.classList.remove("hidden");
+    if (homeSections) homeSections.classList.remove("hidden");  // in case a search hid them
     grid.classList.add("hidden");
+    setTopbarNav(false, false);
     const m = document.querySelector("main");
     if (m) m.scrollTop = 0;
     if (!homeSectionsLoaded) { homeSectionsLoaded = true; loadHomeUnplayed(); loadHomeGenres(); }
@@ -215,18 +227,26 @@
   // don't leave an empty grid behind, without racing actions that render their
   // own content, e.g. labels/search).
   function showWall(opts) {
+    if (window.__clearSearchIfActive) window.__clearSearchIfActive();  // drop stale search results
     if (homeView) homeView.classList.add("hidden");
     grid.classList.remove("hidden");
+    setTopbarNav(true, true);   // random / genre grid: Back + Refresh
     if (opts && opts.loadIfEmpty && !labelsActive && !grid.children.length) loadRandom();
   }
   window.__showHome = showHome;
   window.__showWall = showWall;
+  // Labels/search reuse the shared grid but aren't the random-album wall, so
+  // they show Back but not Refresh.
+  window.__setTopbarNav = setTopbarNav;
+
+  if (topbarBack)    topbarBack.addEventListener("click", showHome);
+  if (topbarRefresh) topbarRefresh.addEventListener("click", () => loadRandom());
 
   async function loadHomeUnplayed() {
     if (!homeUnplayed) return;
     homeUnplayed.innerHTML = '<div class="home-carousel-empty">Loading…</div>';
     try {
-      const r = await fetch("/api/home/unplayed?months=6&count=15");
+      const r = await fetch("/api/home/unplayed?months=6&count=30");
       const j = await r.json();
       const albums = (j && j.albums) || [];
       homeUnplayed.innerHTML = "";
@@ -261,7 +281,7 @@
         card.className = "home-genre-card";
         card.textContent = g.title;
         card.addEventListener("click", () => {
-          showWall();
+          // applyFilter reveals the wall and loads the genre grid.
           if (window.__applyFilter) window.__applyFilter({ type: "genre", value: g.title });
         });
         frag.appendChild(card);
@@ -433,24 +453,9 @@
   // the controls on phones. The library total now lives in Settings; the
   // topbar element is reused only for transient CONTEXT (the active filter
   // value and the labels-browser breadcrumb) and is hidden on the plain wall.
-  let libraryAlbumTotal = null;
-  async function loadAlbumCount() {
-    try {
-      const r = await fetch("/api/library-stats");
-      if (!r.ok) return;
-      const j = await r.json();
-      if (typeof j.albums === "number" && j.albums > 0) {
-        libraryAlbumTotal = j.albums;
-        updateSettingsAlbumCount();
-      }
-    } catch (e) { /* non-fatal — the Settings count line just stays blank */ }
-  }
-  // Library total, shown in the Settings sheet (not the topbar).
-  function updateSettingsAlbumCount() {
-    const el = document.getElementById("settings-album-count");
-    if (!el || libraryAlbumTotal == null) return;
-    el.textContent = libraryAlbumTotal.toLocaleString() + " albums in the library";
-  }
+  // Album counts were removed from every screen. loadAlbumCount is kept as a
+  // no-op so existing call sites don't need touching.
+  async function loadAlbumCount() { /* album counts removed — nothing to load */ }
   // Set the topbar context text directly (used by the labels browser).
   function setCountText(text) {
     const el = document.getElementById("album-count");
@@ -458,20 +463,18 @@
     el.textContent = text;
     el.classList.remove("hidden");
   }
-  // filteredTotal: pool size when a filter is active, else null.
+  // Topbar context label: the active filter's value (genre/tag name) with NO
+  // count; hidden on the plain wall. Counts were removed from all screens.
   function updateCountReadout(filteredTotal) {
     const el = document.getElementById("album-count");
     if (!el) return;
     if (labelsActive) return;   // labels browser manages its own header text
-    if (activeFilter && typeof filteredTotal === "number") {
-      el.textContent = filteredTotal.toLocaleString() + " albums \u00b7 " + activeFilter.value;
-      el.classList.remove("hidden");
-    } else if (activeFilter) {
+    if (activeFilter) {
       el.textContent = activeFilter.value;
       el.classList.remove("hidden");
     } else {
       el.textContent = "";
-      el.classList.add("hidden");   // plain wall: free the row for the controls
+      el.classList.add("hidden");
     }
   }
 
@@ -1106,9 +1109,7 @@
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
       showToast(`${j.action || orig} → ${zoneName(selectedZoneId)}`);
-      if (kind === "play_now" || kind === "shuffle" || kind === "radio") {
-        setTimeout(closeModal, 600);
-      }
+      // Keep the album view open after playing so the user stays on the album.
     } catch (e) {
       showToast(e.message, "error");
     } finally {
@@ -1145,29 +1146,19 @@
 
     // Stop searching and restore the random wall, WITHOUT touching whether the
     // bar itself is open. Used when the field is emptied (incl. the 1st X tap).
+    // Search lives on the Home screen. Clearing it drops the results grid and
+    // restores the Home sections (unplayed / genres) below the search box.
     function stopSearch() {
       active = false;
       seq++;                                   // invalidate any pending response
       if (abort) { try { abort.abort(); } catch (e) {} abort = null; }
       clearTimeout(retryTimer);
       setStatus("");
-      // Restore the wall the user had (cached by loadRandom on each load), or
-      // fetch a fresh one if nothing's cached yet.
-      let restored = false;
-      try {
-        const cached = sessionStorage.getItem("rra-albums");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          const list = Array.isArray(parsed) ? parsed : (parsed && parsed.list);
-          const key  = Array.isArray(parsed) ? "all"  : (parsed && parsed.filter);
-          if (Array.isArray(list) && list.length && key === filterCacheKey()) {
-            setBanner(null);
-            renderAlbumGrid(list);
-            restored = true;
-          }
-        }
-      } catch (e) {} // corrupt sessionStorage cache — fallback to loadRandom() below
-      if (!restored) loadRandom();
+      setBanner(null);
+      grid.innerHTML = "";
+      grid.classList.add("hidden");
+      const hs = document.getElementById("home-sections");
+      if (hs) hs.classList.remove("hidden");
     }
 
     function openSearch() {
@@ -1289,52 +1280,41 @@
     function onInput() {
       const q = input.value.trim();
       clearTimeout(debounceTimer);
-      if (!q) { stopSearch(); return; }                  // emptied: restore wall, keep bar open
+      if (!q) { stopSearch(); return; }                  // emptied: back to Home sections
       if (window.__exitLabels) window.__exitLabels();    // leave the label browser
       exitAlbumSelectMode();
       active = true;
+      // Show the results grid in place of the Home sections (the search box
+      // above it stays put).
+      const hs = document.getElementById("home-sections");
+      if (hs) hs.classList.add("hidden");
+      grid.classList.remove("hidden");
       // Small debounce: long enough to coalesce a fast burst, short enough to
       // still feel instant.
       debounceTimer = setTimeout(() => run(q), 120);
     }
 
-    // Magnifier toggles the bar open/closed.
-    toggle.addEventListener("click", () => {
-      if (row.classList.contains("open")) closeSearch();
-      else openSearch();
-    });
-
     input.addEventListener("input",  onInput);
     input.addEventListener("search", onInput);
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeSearch();
+      // The search box is always present on Home; Escape just clears it.
+      if (e.key === "Escape") { input.value = ""; stopSearch(); input.blur(); }
     });
 
     // The X has two stages: 1st tap clears the text (bar stays open), 2nd tap
     // (now empty) closes the bar.
     clear.addEventListener("click", () => {
-      if (input.value.trim()) {
-        input.value = "";
-        stopSearch();
-        input.focus();
-      } else {
-        closeSearch();
-      }
+      // The box stays present on Home; clearing empties it and restores the
+      // Home sections, keeping focus so the user can retype.
+      input.value = "";
+      stopSearch();
+      input.focus();
     });
 
-    // Refresh means "new random wall", so it also drops out of search mode.
-    // (loadRandom — wired in Boot below — repaints the grid; we just reset UI.)
-    if (refreshBtn) refreshBtn.addEventListener("click", () => {
-      input.value = ""; active = false; seq++;
-      clearTimeout(debounceTimer); clearTimeout(retryTimer);
-      if (abort) { try { abort.abort(); } catch (e) {} abort = null; }
-      setStatus("");
-      row.classList.remove("open");
-      toggle.classList.remove("is-active");
-      toggle.setAttribute("aria-expanded", "false");
-    });
-
-    window.__runSearch = (q) => { openSearch(); input.value = q; onInput(); };
+    window.__runSearch = (q) => { input.value = q; onInput(); };
+    // Called when leaving Home for the wall/labels so stale search results
+    // don't linger in the shared grid. No-op unless a search is active.
+    window.__clearSearchIfActive = () => { if (active) { input.value = ""; stopSearch(); } };
   })();
 
   // ----- Boot -----
@@ -1374,6 +1354,7 @@
       if (window.__exitLabels) window.__exitLabels();
       markActive();
       close();
+      if (window.__showWall) window.__showWall();   // reveal the album grid (leave Home)
       updateCountReadout(null);
       loadRandom();
     }
@@ -1738,6 +1719,9 @@
       mode = "list";
       labelsActive = true;
       clearWallGridSizing();   // labels grid uses its own layout, not the wall's phone-fit
+      { const _hv = document.getElementById("home-view"); if (_hv) _hv.classList.add("hidden"); }
+      grid.classList.remove("hidden");
+      if (window.__setTopbarNav) window.__setTopbarNav(true, false);   // Back (to Home), no Refresh
       labelsBtn.classList.add("is-active");
       if (labelsBar) labelsBar.classList.add("hidden");
       setBanner(null);
@@ -1782,7 +1766,7 @@
           }
           return;
         }
-        setCountText(labels.length.toLocaleString() + " labels");
+        setCountText("Labels");
         updateScanBar(j.scanning ? (j.progress || 0) : null);
         // Only re-render tiles on first load or when the scan finishes.
         // During an active scan, just update the count text so the grid stays
@@ -1912,6 +1896,9 @@
       mode = "albums";
       labelsActive = true;
       clearWallGridSizing();   // label-album grid uses its own layout, not the wall's phone-fit
+      { const _hv = document.getElementById("home-view"); if (_hv) _hv.classList.add("hidden"); }
+      grid.classList.remove("hidden");
+      if (window.__setTopbarNav) window.__setTopbarNav(true, false);   // Back (to Home), no Refresh
       labelsBtn.classList.add("is-active");
       if (labelsBar)   labelsBar.classList.remove("hidden");
       if (labelsTitle) labelsTitle.textContent = name;
@@ -1930,7 +1917,7 @@
           setBanner("No albums found for this label.", false);
           return;
         }
-        setCountText(albums.length.toLocaleString() + " albums · " + name);
+        setCountText(name);
         grid.innerHTML = "";
         const frag = document.createDocumentFragment();
         for (const a of albums) {
@@ -4415,19 +4402,16 @@ initServiceBrowser({
         return;
       }
       if (action === "shuffle") {
-        if (window.__showWall) window.__showWall();
         // Clear any active filter/labels so "Random albums" is a fresh wall.
+        // applyFilter(null) reveals the wall and loads it.
         if (window.__applyFilter) window.__applyFilter(null);
         else if (window.__loadRandom) window.__loadRandom();
         return;
       }
 
-      // Every other item acts on / returns to the album wall. Labels and
-      // search render their own content, so don't lazy-load a wall that
-      // would race them; everything else (overlays, play-unheard, filter)
-      // gets a populated wall behind it.
-      const rendersOwnContent = target === "labels-toggle" || target === "search-toggle";
-      if (window.__showWall) window.__showWall({ loadIfEmpty: !rendersOwnContent });
+      // Everything else just triggers the original control; each one manages
+      // its own view — Filter/Labels reveal the wall when they render, Qobuz/
+      // Tidal/Settings open an overlay over Home, Play-unheard just plays.
       if (target) {
         const btn = document.getElementById(target);
         if (btn) btn.click();

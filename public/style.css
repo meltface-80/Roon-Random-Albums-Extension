@@ -18,6 +18,7 @@
   --accent:       #4cb7e6;
   --accent-soft:  rgba(76,183,230,.15);
   --danger:       #e06464;
+  --home-unplayed-bg: #2b3037;   /* pale grey panel on dark */
   --shadow-card:  0 2px 6px rgba(0,0,0,.45), 0 10px 24px rgba(0,0,0,.35);
   --shadow-modal: 0 24px 64px rgba(0,0,0,.6);
 }
@@ -32,6 +33,7 @@
   --text-faint:   #8c919a;
   --accent:       #1f8fc1;
   --accent-soft:  rgba(31,143,193,.12);
+  --home-unplayed-bg: #d9e8fb;   /* soft blue panel on light */
   --danger:       #c0392b;
   --shadow-card:  0 1px 2px rgba(0,0,0,.06), 0 6px 16px rgba(0,0,0,.08);
   --shadow-modal: 0 24px 64px rgba(0,0,0,.18);
@@ -86,9 +88,11 @@ button { font-family: inherit; }
   border-bottom: 1px solid var(--border);
 }
 .topbar-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px;
+  display: flex; align-items: center; justify-content: flex-start;
+  gap: 10px;
 }
+/* Refresh sits at the far right of the top bar. */
+#topbar-refresh { margin-left: auto; }
 [data-theme="light"] .topbar { background: rgba(246,245,242,.85); }
 
 .album-count {
@@ -2280,15 +2284,36 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 .menu-item span { flex: 1; }
 
 .home-view.hidden { display: none; }
+.home-search { margin: 2px 0 18px; }
 .home-section { margin: 0 0 22px; }
 .home-section-title { font-size: 16px; font-weight: 700; color: var(--text); margin: 0 0 12px; }
+
+/* "Not played in 6 months" stands out with a coloured panel: pale grey in
+   dark mode, a soft blue in light mode. */
+.home-section-unplayed {
+  background: var(--home-unplayed-bg);
+  border-radius: 16px;
+  padding: 14px 14px 12px;
+}
 .home-carousel {
-  display: flex; gap: 12px; overflow-x: auto;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: 1fr;          /* phone / portrait: single row */
+  grid-auto-columns: 150px;
+  gap: 12px;
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch; scrollbar-width: none;
   padding-bottom: 4px;
 }
 .home-carousel::-webkit-scrollbar { display: none; }
-.home-carousel .album { flex-shrink: 0; width: 150px; }
+.home-carousel .album { width: auto; flex-shrink: 0; }
+/* Landscape tablets → 2 rows; desktops → 3 rows. */
+@media (min-width: 768px) and (orientation: landscape) {
+  .home-carousel { grid-template-rows: repeat(2, auto); }
+}
+@media (min-width: 1200px) {
+  .home-carousel { grid-template-rows: repeat(3, auto); }
+}
 .home-carousel-empty { color: var(--text-faint); font-size: 13px; padding: 8px 2px; }
 .home-genre-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 @media (min-width: 560px)  { .home-genre-grid { grid-template-columns: repeat(3, 1fr); } }
