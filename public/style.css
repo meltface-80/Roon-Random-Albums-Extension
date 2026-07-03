@@ -2324,6 +2324,10 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   overflow-x: auto;
   -webkit-overflow-scrolling: touch; scrollbar-width: none;
   padding-bottom: 4px;
+  /* Centre the tiles when they don't fill the panel; "safe" falls back to
+     left-alignment when the row overflows so the first tile is never clipped
+     and horizontal scrolling still works. */
+  justify-content: safe center;
 }
 .home-carousel::-webkit-scrollbar { display: none; }
 .home-carousel .album { width: auto; flex-shrink: 0; }
@@ -2332,11 +2336,11 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 @media (min-width: 768px) and (orientation: landscape) {
   .home-carousel { grid-template-rows: repeat(2, auto); }
 }
-/* Label of the week is a taller carousel: 2 rows on tablets, 3 on desktops,
-   so a featured label's catalogue fills more of the panel. */
-@media (min-width: 1200px) {
-  .home-carousel-tall { grid-template-rows: repeat(3, auto); }
-}
+/* Label of the week is ALWAYS a single-row carousel on every screen (phone,
+   landscape tablet, desktop). This two-class selector (specificity 0,2,0) beats
+   the single-class multi-row rule in the breakpoint above (0,1,0) regardless of
+   source order — media queries add no specificity — so it never wraps. */
+.home-carousel.home-carousel-1row { grid-template-rows: 1fr; }
 .home-carousel-empty { color: var(--text-faint); font-size: 13px; padding: 8px 2px; }
 /* 12 genre buttons divide evenly into 2 / 3 / 4 / 6 columns, so every screen
    width shows full rows with no lone trailing card. */

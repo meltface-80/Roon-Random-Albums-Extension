@@ -3074,9 +3074,9 @@ app.get("/api/home/label-of-the-week", (req, res) => {
         (Date.now() - lotwCache.at) < 60 * 60 * 1000) {
       return res.json(lotwCache.data);
     }
-    // Only feature labels with a fuller catalogue (>= 6 albums) so the carousel
-    // fills out (up to 3 rows on desktop). Sort the keys so the pick is stable
-    // regardless of Map insertion order.
+    // Only feature labels with a fuller catalogue (>= 6 albums) so the
+    // single-row carousel has enough to fill out. Sort the keys so the pick is
+    // stable regardless of Map insertion order.
     const keys = [...labelsIndex.map.entries()]
       .filter(([, e]) => e.albums && e.albums.length >= 6)
       .map(([k]) => k)

@@ -2,6 +2,12 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.109] — 2026-07-03
+
+### Fixed
+- **"Label of the week" now shows as a single-row carousel on every screen** (phone, landscape tablet, desktop). On desktop it was wrongly wrapping to 3 rows and leaving a large empty area; it's now one horizontal row that scrolls, like the other rows.
+- **"Not played in 6 months" and "Random albums" rows are centred** in their panels when the albums don't fill the full width, instead of hugging the left edge (`justify-content: safe center` — still left-aligns and scrolls when the row overflows, so nothing is clipped).
+
 ## [1.5.108] — 2026-07-03
 
 ### Fixed
