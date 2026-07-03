@@ -191,6 +191,83 @@
     }, 250);
   });
 
+  // ----- Home landing view -----
+  const homeView     = document.getElementById("home-view");
+  const homeUnplayed = document.getElementById("home-unplayed");
+  const homeGenres   = document.getElementById("home-genres");
+  let homeSectionsLoaded = false;
+
+  // Show the Home landing (hide the wall). The wall loads lazily when entered.
+  function showHome() {
+    if (window.__exitLabels) window.__exitLabels();   // leave the labels browser if active
+    if (homeView) homeView.classList.remove("hidden");
+    grid.classList.add("hidden");
+    const m = document.querySelector("main");
+    if (m) m.scrollTop = 0;
+    if (!homeSectionsLoaded) { homeSectionsLoaded = true; loadHomeUnplayed(); loadHomeGenres(); }
+  }
+  // Reveal the album wall. opts.loadIfEmpty loads a fresh wall only when it has
+  // no content yet (so passive reveals — opening an overlay from the menu —
+  // don't leave an empty grid behind, without racing actions that render their
+  // own content, e.g. labels/search).
+  function showWall(opts) {
+    if (homeView) homeView.classList.add("hidden");
+    grid.classList.remove("hidden");
+    if (opts && opts.loadIfEmpty && !labelsActive && !grid.children.length) loadRandom();
+  }
+  window.__showHome = showHome;
+  window.__showWall = showWall;
+
+  async function loadHomeUnplayed() {
+    if (!homeUnplayed) return;
+    homeUnplayed.innerHTML = '<div class="home-carousel-empty">Loading…</div>';
+    try {
+      const r = await fetch("/api/home/unplayed?months=6&count=15");
+      const j = await r.json();
+      const albums = (j && j.albums) || [];
+      homeUnplayed.innerHTML = "";
+      if (!albums.length) {
+        homeUnplayed.innerHTML = '<div class="home-carousel-empty">Nothing here yet — play some music and check back.</div>';
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      for (const a of albums) frag.appendChild(buildAlbumTile(a, () => openAlbum(a)));
+      homeUnplayed.appendChild(frag);
+    } catch (e) {
+      homeUnplayed.innerHTML = '<div class="home-carousel-empty">Couldn’t load.</div>';
+    }
+  }
+
+  async function loadHomeGenres() {
+    if (!homeGenres) return;
+    homeGenres.innerHTML = '<div class="home-carousel-empty">Loading…</div>';
+    try {
+      const r = await fetch("/api/filters/genres");
+      const j = await r.json();
+      const genres = ((j && j.genres) || []).slice(0, 10);   // top 10 parent genres, biggest first
+      homeGenres.innerHTML = "";
+      if (!genres.length) {
+        homeGenres.innerHTML = '<div class="home-carousel-empty">No genres found.</div>';
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      for (const g of genres) {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "home-genre-card";
+        card.textContent = g.title;
+        card.addEventListener("click", () => {
+          showWall();
+          if (window.__applyFilter) window.__applyFilter({ type: "genre", value: g.title });
+        });
+        frag.appendChild(card);
+      }
+      homeGenres.appendChild(frag);
+    } catch (e) {
+      homeGenres.innerHTML = '<div class="home-carousel-empty">Couldn’t load genres.</div>';
+    }
+  }
+
   // ----- Toast / banner -----
   let toastTimer = null;
   function showToast(msg, kind) {
@@ -1296,6 +1373,7 @@
       updateCountReadout(null);
       loadRandom();
     }
+    window.__applyFilter = applyFilter;   // used by the Home "Browse by genre" cards
 
     function renderList(container, type, rows) {
       container.innerHTML = "";
@@ -1954,22 +2032,9 @@
           setBanner(null);
           await loadZones();
 
-          // Restore album wall from sessionStorage if present so navigating
-          // away (e.g. external link) and back doesn't shuffle the view.
-          let restored = false;
-          try {
-            const cached = sessionStorage.getItem("rra-albums");
-            if (cached) {
-              const parsed = JSON.parse(cached);
-              const list = Array.isArray(parsed) ? parsed : (parsed && parsed.list);
-              const key  = Array.isArray(parsed) ? "all"  : (parsed && parsed.filter);
-              if (Array.isArray(list) && list.length && key === filterCacheKey()) {
-                renderAlbums(list);
-                restored = true;
-              }
-            }
-          } catch (e) {} // corrupt sessionStorage — fallback to loadRandom() below
-          if (!restored) await loadRandom();
+          // Home is the landing view; the album wall loads lazily when the
+          // user enters it (menu → Random albums / a genre / filter / labels).
+          showHome();
           loadAlbumCount();
 
           // Restore the album modal if it was open
@@ -3203,15 +3268,17 @@
   const tidalStatus      = document.getElementById("tidal-status");
   const tidalAuthPending = document.getElementById("tidal-auth-pending");
   const tidalTopbarBtn   = document.getElementById("tidal-toggle");
+  const tidalMenuItem    = document.getElementById("menu-item-tidal");
 
-  // Loads connection state, and gates the topbar Tidal button on it — the
-  // Tidal browser is only reachable while an account is connected.
+  // Loads connection state, and gates the Tidal controls on it — the Tidal
+  // browser is only reachable while an account is connected.
   async function loadTidalStatus() {
     try {
       const r = await fetch("/api/settings/tidal");
       const j = await r.json();
       if (tidalDisconnect) tidalDisconnect.classList.toggle("hidden", !j.connected);
       if (tidalTopbarBtn) tidalTopbarBtn.classList.toggle("hidden", !j.connected);
+      if (tidalMenuItem) tidalMenuItem.classList.toggle("hidden", !j.connected);
       if (!tidalStatus) return;
       if (j.connected) {
         tidalStatus.textContent = "Connected" + (j.displayName ? " as " + j.displayName : "");
@@ -4310,4 +4377,57 @@ initServiceBrowser({
       banner.classList.add("hidden");
     });
   }
+})();
+
+/* ------------------------------------------------------------------ */
+/*  Side menu (hamburger drawer)                                        */
+/*  Items with data-target trigger the hidden top-bar button of that   */
+/*  id; data-action items switch the main view (home / random wall).   */
+/* ------------------------------------------------------------------ */
+(function initMenuDrawer() {
+  const overlay = document.getElementById("menu-overlay");
+  const toggle  = document.getElementById("menu-toggle");
+  if (!overlay || !toggle) return;
+
+  const openMenu  = () => overlay.classList.remove("hidden");
+  const closeMenu = () => overlay.classList.add("hidden");
+
+  toggle.addEventListener("click", openMenu);
+  overlay.addEventListener("click", (e) => {
+    if (e.target.closest && e.target.closest("[data-menu-close]")) closeMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !overlay.classList.contains("hidden")) closeMenu();
+  });
+
+  overlay.querySelectorAll(".menu-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      const action = item.dataset.action;
+      const target = item.dataset.target;
+      closeMenu();
+
+      if (action === "home") {
+        if (window.__showHome) window.__showHome();
+        return;
+      }
+      if (action === "shuffle") {
+        if (window.__showWall) window.__showWall();
+        // Clear any active filter/labels so "Random albums" is a fresh wall.
+        if (window.__applyFilter) window.__applyFilter(null);
+        else if (window.__loadRandom) window.__loadRandom();
+        return;
+      }
+
+      // Every other item acts on / returns to the album wall. Labels and
+      // search render their own content, so don't lazy-load a wall that
+      // would race them; everything else (overlays, play-unheard, filter)
+      // gets a populated wall behind it.
+      const rendersOwnContent = target === "labels-toggle" || target === "search-toggle";
+      if (window.__showWall) window.__showWall({ loadIfEmpty: !rendersOwnContent });
+      if (target) {
+        const btn = document.getElementById(target);
+        if (btn) btn.click();
+      }
+    });
+  });
 })();

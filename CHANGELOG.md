@@ -2,6 +2,18 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.102] — 2026-07-03
+
+### Added — Home redesign (phase 1)
+- **Home landing page with sections.** The app now opens on a Home view instead of the raw album wall:
+  - **"Not played in 6 months"** — a horizontal carousel of albums with no play in the last 6 months (backed by the play history), reusing the standard album tile → detail modal (all metadata retained). New endpoint `GET /api/home/unplayed?months=6&count=N`.
+  - **"Browse by genre"** — the top 10 library genres (biggest first) as cards; tapping one opens that genre in the album wall at the device-appropriate grid size. Reuses the existing genre filter and `/api/filters/genres`.
+- **Pop-out side menu (hamburger).** A drawer slides in from the left. **All former top-bar buttons now live in the menu as icon + label** — Filter, Labels, Qobuz, Tidal (shown only when connected), Play something unheard, Search, Settings — plus **Home** and **Random albums**. The top bar now shows just the hamburger, decluttering it. Menu items trigger the original controls (unchanged behavior); backdrop tap and Escape close the drawer.
+- The album wall is reached from the menu ("Random albums") or by tapping a genre/filter; it loads lazily on first entry and keeps the v1.5.101 phone-fit sizing.
+
+### Notes
+- This is phase 1 of the redesign. Still to come: separate Qobuz/Tidal "new releases in the last 30 days" carousels (excluding albums already in your library), and a Pitchfork magazine area.
+
 ## [1.5.101] — 2026-07-02
 
 ### Changed

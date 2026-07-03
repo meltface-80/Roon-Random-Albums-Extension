@@ -2960,6 +2960,49 @@ app.get("/api/random-albums", async (req, res) => {
   }
 });
 
+// Home section: random albums NOT played in the last N months (default 6).
+// Uses the in-memory album index (no Roon browse) filtered against the plays
+// table, so it's fast. Returns the same album shape as /api/random-albums, so
+// the tiles open via the existing modal/play path. Matching is by album title
+// (the plays table only records the title — same imprecision as play-unheard).
+app.get("/api/home/unplayed", async (req, res) => {
+  if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
+  let months = parseInt(req.query.months, 10);
+  if (!Number.isFinite(months) || months <= 0 || months > 60) months = 6;
+  let count = parseInt(req.query.count, 10);
+  if (!Number.isFinite(count) || count <= 0 || count > 96) count = 12;
+  try {
+    await ensureAlbumIndex();   // build the album index if it isn't ready yet
+    const cutoff = Date.now() - months * 30 * 24 * 60 * 60 * 1000;
+    let heard = new Set();
+    if (labelsDb) {
+      try {
+        heard = new Set(
+          labelsDb.prepare("SELECT DISTINCT lower(trim(album)) as a FROM plays WHERE ts > ? AND album != ''")
+                  .all(cutoff).map(r => r.a)
+        );
+      } catch (e) { heard = new Set(); /* DB unavailable — treat everything as unplayed */ }
+    }
+    const pool = [];
+    for (const al of albumIndex.albums) {
+      const t = (al.title || "").toLowerCase().trim();
+      if (t && heard.has(t)) continue;   // played within the window — skip
+      pool.push(al);
+    }
+    if (!pool.length) return res.json({ albums: [], total: 0, months });
+    const want = Math.min(count, pool.length);
+    const picked = new Set();
+    while (picked.size < want) picked.add(Math.floor(Math.random() * pool.length));
+    const albums = [...picked].map(i => {
+      const al = pool[i];
+      return { offset: al.offset, title: al.title || "", subtitle: al.subtitle || "", image_key: al.image_key || null };
+    });
+    res.json({ albums, total: pool.length, months });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Available genres (top level of the "genres" hierarchy).
 app.get("/api/filters/genres", async (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
