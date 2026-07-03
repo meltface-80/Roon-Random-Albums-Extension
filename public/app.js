@@ -84,7 +84,7 @@
 
   // ----- Sizing -----
   // Returns a fixed album count that exactly fills the responsive grid:
-  //   Phone portrait   → 3×3  = 9   (landscape is blocked via CSS overlay)
+  //   Phone portrait   → 3 cols × measured rows (min 3×3 = 9, capped at 96)
   //   Tablet portrait  → 5×4  = 20
   //   Tablet landscape → 7×3  = 21
   //   Desktop          → 9×5  = 45
@@ -94,8 +94,36 @@
     const isLandscape = w > h;
     const minDim = Math.min(w, h);  // smallest dimension identifies phones vs tablets
 
-    // Phone (narrowest side < 768 px)
-    if (minDim < 768) return 9;     // 3×3, landscape is blocked via CSS overlay
+    // Phone (narrowest side < 768 px): 3 columns fixed (landscape is blocked
+    // via CSS overlay). Measure how many rows of square-art tiles fit the
+    // visible grid area so tall phones fill the screen instead of always 3×3.
+    if (minDim < 768) {
+      const COLS = 3;
+      const ROW_GAP = 12;        // matches phone .album-grid gap: 12px 8px (style.css)
+      const COL_GAP = 8;
+      // Tile text block on phones (style.css ≤767px rules):
+      //   6px .album-meta margin-top + 2 title lines (12px × 1.25) +
+      //   1px flex gap + 1 artist line (10.5px × 1.3 ≈ 13.65px) ≈ 51px
+      const TEXT_BLOCK = 51;
+      const mainEl = document.querySelector("main");
+      let gridW, availH;
+      if (mainEl && mainEl.clientHeight > 0) {
+        const cs = window.getComputedStyle(mainEl);
+        gridW = mainEl.clientWidth
+          - (parseFloat(cs.paddingLeft) || 0)
+          - (parseFloat(cs.paddingRight) || 0);
+        availH = mainEl.clientHeight;
+      } else {
+        // Pre-layout fallback: 14px <main> side padding, ~210px for the
+        // top bar plus <main> vertical padding.
+        gridW = w - 28;
+        availH = h - 210;
+      }
+      const tileW = (gridW - (COLS - 1) * COL_GAP) / COLS;
+      const tileH = tileW + TEXT_BLOCK;
+      const rows = Math.max(3, Math.floor((availH + ROW_GAP) / (tileH + ROW_GAP)));
+      return Math.min(96, COLS * rows);  // 96 = server max for ?count (index.js)
+    }
 
     // Desktop (width ≥ 1200 px)
     if (w >= 1200) return 45;       // 9×5
@@ -260,22 +288,30 @@
   }
 
   // ----- Random albums fetch -----
-  // ----- Library album count (header readout) -----
+  // ----- Library album count -----
+  // The topbar no longer shows a persistent "N albums" readout — it crowded
+  // the controls on phones. The library total now lives in Settings; the
+  // topbar element is reused only for transient CONTEXT (the active filter
+  // value and the labels-browser breadcrumb) and is hidden on the plain wall.
   let libraryAlbumTotal = null;
   async function loadAlbumCount() {
-    const el = document.getElementById("album-count");
-    if (!el) return;
     try {
       const r = await fetch("/api/library-stats");
       if (!r.ok) return;
       const j = await r.json();
       if (typeof j.albums === "number" && j.albums > 0) {
         libraryAlbumTotal = j.albums;
-        updateCountReadout(null);
+        updateSettingsAlbumCount();
       }
-    } catch (e) { /* non-fatal — album count header stays blank until next refresh */ }
+    } catch (e) { /* non-fatal — the Settings count line just stays blank */ }
   }
-  // Set the header readout text directly (used by the labels browser).
+  // Library total, shown in the Settings sheet (not the topbar).
+  function updateSettingsAlbumCount() {
+    const el = document.getElementById("settings-album-count");
+    if (!el || libraryAlbumTotal == null) return;
+    el.textContent = libraryAlbumTotal.toLocaleString() + " albums in the library";
+  }
+  // Set the topbar context text directly (used by the labels browser).
   function setCountText(text) {
     const el = document.getElementById("album-count");
     if (!el) return;
@@ -293,9 +329,9 @@
     } else if (activeFilter) {
       el.textContent = activeFilter.value;
       el.classList.remove("hidden");
-    } else if (libraryAlbumTotal != null) {
-      el.textContent = libraryAlbumTotal.toLocaleString() + " albums";
-      el.classList.remove("hidden");
+    } else {
+      el.textContent = "";
+      el.classList.add("hidden");   // plain wall: free the row for the controls
     }
   }
 
