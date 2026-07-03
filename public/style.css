@@ -532,7 +532,7 @@ main {
    specificity means source order decides. */
 @media (max-width: 767px) {
   .album-grid { gap: 12px 8px; }
-  .album-meta { margin-top: 6px; gap: 1px; }
+  .album-meta { margin-top: 5px; gap: 1px; }
   .album-title {
     font-size: 12px; line-height: 1.25;
     display: -webkit-box;
@@ -541,6 +541,20 @@ main {
     overflow: hidden;
   }
   .album-artist { font-size: 10.5px; }
+}
+
+/* Phone portrait: fill the visible wall with exactly N rows (target 4) without
+   scrolling. app.js (measurePhoneWall) sets --phone-art to the largest square
+   art size that lets the target rows fit the measured content box, and adds
+   .phone-fit. When the wall is width-limited the art is the natural third-of-
+   width (no shrink); when height-limited the art shrinks a little so the rows
+   still fit instead of overflowing. Class is added only for the album wall on
+   phones (removed in the labels browser and on tablet/desktop). */
+.album-grid.phone-fit {
+  grid-template-columns: repeat(3, var(--phone-art, 1fr));
+  justify-content: center;
+  column-gap: 8px;
+  row-gap: 10px;
 }
 
 /* Skeleton */
@@ -1289,8 +1303,8 @@ main {
 /*  Mini transport — Roon-style sizing                                 */
 /* ------------------------------------------------------------------ */
 .mini-transport {
-  padding: 13px 14px;
-  padding-bottom: calc(13px + env(safe-area-inset-bottom));
+  padding: 10px 14px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
 .mt-info { gap: 13px; }
 .mt-info { cursor: pointer; }  /* tappable to open the now-playing screen */
@@ -1302,15 +1316,15 @@ main {
 .mt-playpause { width: 54px; height: 54px; }
 .mt-playpause svg { width: 32px; height: 32px; }
 
-main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
 @media (max-width: 480px) {
   .mt-info { gap: 11px; }
   .mt-controls { gap: 2px; }
-  .mt-btn { width: 48px; height: 48px; }
-  .mt-btn svg { width: 28px; height: 28px; }
-  .mt-playpause { width: 50px; height: 50px; }
-  .mt-playpause svg { width: 30px; height: 30px; }
+  .mt-btn { width: 44px; height: 44px; }
+  .mt-btn svg { width: 26px; height: 26px; }
+  .mt-playpause { width: 46px; height: 46px; }
+  .mt-playpause svg { width: 28px; height: 28px; }
 }
 
 /* ------------------------------------------------------------------ */

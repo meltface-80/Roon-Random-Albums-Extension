@@ -2,6 +2,16 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.101] — 2026-07-02
+
+### Changed
+- **Phone portrait wall now shows 4 rows, fitted to the screen without scrolling** — the wall targets 4 rows of 3 albums (12 total) and sizes the artwork to exactly fit the visible area. When the layout is width-limited the tiles stay at their natural full size; only when the viewport is short does the art shrink a little so all 4 rows still fit rather than overflowing into a scroll. Falls back to 3 rows on very short phones (art would otherwise get too small). Re-fits on viewport resize.
+- **Slightly shorter mini transport bar** — trimmed vertical padding (13→10px) and phone button sizes, and reduced the reserved clearance below the wall (96→80px), giving the grid more room for the 4th row.
+
+### Fixed
+- **Wall row count under-filled on tall phones** — the previous measurement divided by `main.clientHeight` (which includes the padding reserved for the transport) and, on the very first call, ran before layout and fell back to a guess — so tall phones under-filled to 3 rows with dead space below. The new sizing measures the true content box (subtracting `main`'s padding) and derives the tile size that makes the target rows fit, so the outcome no longer depends on call timing.
+- **Error class:** measurement-vs-layout mismatch (dividing by a height that included reserved padding, plus a pre-layout first call). Resolved by measuring the real content box and solving for tile size instead of counting rows against an approximate height.
+
 ## [1.5.100] — 2026-07-02
 
 ### Changed

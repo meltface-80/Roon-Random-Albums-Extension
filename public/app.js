@@ -88,41 +88,84 @@
   //   Tablet portrait  → 5×4  = 20
   //   Tablet landscape → 7×3  = 21
   //   Desktop          → 9×5  = 45
+  // Phone wall geometry. TEXT_BLOCK/gaps mirror the .album-grid.phone-fit and
+  // phone .album-meta rules in style.css — keep them in sync.
+  const PHONE_WALL = {
+    COLS: 3,
+    ROW_GAP: 10,     // .album-grid.phone-fit row-gap
+    COL_GAP: 8,      // .album-grid.phone-fit column-gap
+    TEXT_BLOCK: 51,  // worst case: 5px meta margin + 2 title lines (12×1.25=30) + 1px gap + artist (~15) = 51
+                     // sized for the 2-line-title max so 4 rows never overflow into a scroll
+    MIN_ART: 96,     // don't shrink art below this — drop a row instead
+    TARGET_ROWS: 4
+  };
+
+  // Measure the phone wall: return { rows, art } — the largest square art size
+  // that lets `rows` rows fit the visible content box without scrolling. When
+  // the wall is width-limited, art is the natural third-of-width (no shrink);
+  // when height-limited, art shrinks so the target rows still fit. Falls back
+  // to 3 rows if 4 can't fit at a reasonable size.
+  function measurePhoneWall() {
+    const P = PHONE_WALL;
+    const mainEl = document.querySelector("main");
+    let innerW, innerH;
+    if (mainEl && mainEl.clientHeight > 0) {
+      const cs = window.getComputedStyle(mainEl);
+      // Subtract <main>'s padding — the bottom padding reserves the transport,
+      // so innerH is the true height the grid can occupy.
+      innerW = mainEl.clientWidth
+        - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+      innerH = mainEl.clientHeight
+        - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+    } else {
+      // Pre-layout fallback: ~110px top bar, ~94px <main> vertical padding.
+      innerW = window.innerWidth - 28;
+      innerH = window.innerHeight - 110 - 94;
+    }
+    const artW = (innerW - (P.COLS - 1) * P.COL_GAP) / P.COLS;
+    const artForRows = (r) => (innerH - (r - 1) * P.ROW_GAP - r * P.TEXT_BLOCK) / r;
+    let rows = P.TARGET_ROWS;
+    let art = Math.min(artW, artForRows(P.TARGET_ROWS));
+    if (art < P.MIN_ART) {
+      rows = 3;
+      art = Math.min(artW, artForRows(3));
+      if (art < P.MIN_ART) art = artW;   // very short screen: natural size, may scroll
+    }
+    return { rows, art: Math.max(1, Math.floor(art)) };
+  }
+
+  // Remove the phone-fit wall sizing (used when the labels browser takes over
+  // the shared grid, so label tiles use their own default layout).
+  function clearWallGridSizing() {
+    grid.classList.remove("phone-fit");
+    grid.style.removeProperty("--phone-art");
+  }
+
+  // Apply (or clear) the phone-fit sizing on the album wall grid. Called for
+  // the album wall only — the labels browser removes it so it keeps its own
+  // layout. Returns the album count for the wall, or null off-phone.
+  function applyWallGridSizing() {
+    if (Math.min(window.innerWidth, window.innerHeight) >= 768) {
+      grid.classList.remove("phone-fit");
+      grid.style.removeProperty("--phone-art");
+      return null;
+    }
+    const m = measurePhoneWall();
+    grid.style.setProperty("--phone-art", m.art + "px");
+    grid.classList.add("phone-fit");
+    return PHONE_WALL.COLS * m.rows;
+  }
+
   function computeAlbumCount() {
     const w = window.innerWidth;
     const h = window.innerHeight;
     const isLandscape = w > h;
     const minDim = Math.min(w, h);  // smallest dimension identifies phones vs tablets
 
-    // Phone (narrowest side < 768 px): 3 columns fixed (landscape is blocked
-    // via CSS overlay). Measure how many rows of square-art tiles fit the
-    // visible grid area so tall phones fill the screen instead of always 3×3.
+    // Phone (narrowest side < 768 px): 3 columns, rows measured to fill the
+    // screen (target 4) — see measurePhoneWall. Landscape is blocked via CSS.
     if (minDim < 768) {
-      const COLS = 3;
-      const ROW_GAP = 12;        // matches phone .album-grid gap: 12px 8px (style.css)
-      const COL_GAP = 8;
-      // Tile text block on phones (style.css ≤767px rules):
-      //   6px .album-meta margin-top + 2 title lines (12px × 1.25) +
-      //   1px flex gap + 1 artist line (10.5px × 1.3 ≈ 13.65px) ≈ 51px
-      const TEXT_BLOCK = 51;
-      const mainEl = document.querySelector("main");
-      let gridW, availH;
-      if (mainEl && mainEl.clientHeight > 0) {
-        const cs = window.getComputedStyle(mainEl);
-        gridW = mainEl.clientWidth
-          - (parseFloat(cs.paddingLeft) || 0)
-          - (parseFloat(cs.paddingRight) || 0);
-        availH = mainEl.clientHeight;
-      } else {
-        // Pre-layout fallback: 14px <main> side padding, ~210px for the
-        // top bar plus <main> vertical padding.
-        gridW = w - 28;
-        availH = h - 210;
-      }
-      const tileW = (gridW - (COLS - 1) * COL_GAP) / COLS;
-      const tileH = tileW + TEXT_BLOCK;
-      const rows = Math.max(3, Math.floor((availH + ROW_GAP) / (tileH + ROW_GAP)));
-      return Math.min(96, COLS * rows);  // 96 = server max for ?count (index.js)
+      return Math.min(96, PHONE_WALL.COLS * measurePhoneWall().rows);  // 96 = server max
     }
 
     // Desktop (width ≥ 1200 px)
@@ -131,6 +174,22 @@
     // Tablet (768–1199 px)
     return isLandscape ? 21 : 20;   // 7×3 or 5×4
   }
+
+  // Re-fit the phone wall when the viewport resizes (Safari chrome collapsing,
+  // iPad split view). Debounced; ignores the labels browser (its grid is its
+  // own) and only reloads when the row count actually changes — otherwise it
+  // just rescales the art so nothing needs to scroll.
+  let _wallResizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(_wallResizeTimer);
+    _wallResizeTimer = setTimeout(() => {
+      if (labelsActive) return;
+      if (Math.min(window.innerWidth, window.innerHeight) >= 768) return;
+      const next = computeAlbumCount();
+      if (next !== albumCount) loadRandom();   // rows changed → refetch to fill exactly
+      else applyWallGridSizing();              // same rows → rescale art in place
+    }, 250);
+  });
 
   // ----- Toast / banner -----
   let toastTimer = null;
@@ -337,7 +396,10 @@
 
   async function loadRandom() {
     refreshBtn.disabled = true;
-    albumCount = computeAlbumCount();
+    // Size the wall grid (phone-fit) and take its count in one measurement;
+    // off-phone applyWallGridSizing returns null and we use computeAlbumCount.
+    const wallCount = applyWallGridSizing();
+    albumCount = wallCount != null ? Math.min(96, wallCount) : computeAlbumCount();
     renderSkeletons(albumCount);
     try {
       const r = await fetch(`/api/random-albums?count=${albumCount}${filterQS()}`);
@@ -1593,6 +1655,7 @@
       const restoreScroll = !isRepoll && _labelsScrollSaved > 0;
       mode = "list";
       labelsActive = true;
+      clearWallGridSizing();   // labels grid uses its own layout, not the wall's phone-fit
       labelsBtn.classList.add("is-active");
       if (labelsBar) labelsBar.classList.add("hidden");
       setBanner(null);
@@ -1766,6 +1829,7 @@
       currentLabelName = name;
       mode = "albums";
       labelsActive = true;
+      clearWallGridSizing();   // label-album grid uses its own layout, not the wall's phone-fit
       labelsBtn.classList.add("is-active");
       if (labelsBar)   labelsBar.classList.remove("hidden");
       if (labelsTitle) labelsTitle.textContent = name;
