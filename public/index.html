@@ -287,18 +287,18 @@ sudo systemctl disable roon-random-albums</pre>
     <section id="home-view" class="home-view hidden" aria-label="Home">
       <div id="home-sections">
         <div class="home-section home-section-unplayed">
-          <h2 class="home-section-title">Not played in 6 months</h2>
+          <h2 class="home-section-title home-section-link" id="home-unplayed-title" role="button" tabindex="0">Not played in 6 months</h2>
           <div id="home-unplayed" class="home-carousel"></div>
         </div>
-        <div class="home-section">
+        <div class="home-section home-section-random">
           <h2 class="home-section-title home-section-link" id="home-random-title" role="button" tabindex="0">Random albums</h2>
           <div id="home-random" class="home-carousel"></div>
         </div>
-        <div class="home-section">
+        <div class="home-section home-section-lotw">
           <h2 class="home-section-title home-section-link" id="home-lotw-title" role="button" tabindex="0">Label of the week</h2>
-          <div id="home-lotw" class="home-carousel"></div>
+          <div id="home-lotw" class="home-carousel home-carousel-tall"></div>
         </div>
-        <div class="home-section">
+        <div class="home-section home-section-genres">
           <h2 class="home-section-title">Browse by genre</h2>
           <div id="home-genres" class="home-genre-grid"></div>
         </div>

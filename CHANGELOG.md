@@ -2,6 +2,19 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.108] — 2026-07-03
+
+### Fixed
+- **Rock/Metal no longer pulls in soft-rock, singer-songwriter and pop albums** (Carole King – Tapestry, James Taylor, Madonna, Duran Duran, Bryan Ferry, Ultravox). The old rule keyed on the word "rock", which appears in soft/pop styles ("Soft Rock", "Contemporary Pop/Rock", "Adult Alternative Pop/Rock", "Folk-Rock"), so those leaked in. The classifier now: (1) skips the generic "Pop/Rock" catch-all; (2) routes anything with the literal word "pop" to Pop; (3) excludes soft styles with no "pop" (Soft Rock, Folk-Rock, Adult Contemporary, Singer/Songwriter, Easy Listening, New Age); (4) sends only genuinely hard, guitar-driven styles (metal, hard/album/arena/classic/garage rock, punk, grunge, prog, psychedelic, shoegaze, indie rock, britpop, goth, industrial, ska, rap-rock…) to Rock/Metal; (5) sends remaining pop-family styles (Dance, Disco, Synth, New Wave, Soul, R&B, Funk, Motown) to Pop.
+
+### Added
+- **"Not played in 6 months" title is now a button** — tap the section header to open a full-screen grid of albums you haven't played in 6 months (up to 96), with a Back button to Home.
+
+### Changed
+- **Desktop: "Not played in 6 months" and "Random albums" now fill the width** — 2 rows on desktop (was 3 short, half-empty rows) so wide screens show more albums per row. Phones/tablets unchanged. The Home "Random albums" row now fetches 30 albums (was 24).
+- **"Label of the week" carousel is taller** — 1 row on phones, 2 on tablets, 3 on desktops — and now features labels with at least 6 albums (was 3) so the row fills out.
+- **Each Home section has its own tinted panel** — grey (not played), teal (random), violet (label of the week), amber (browse by genre) — muted in dark mode, pastel in light mode, so the sections read as distinct blocks.
+
 ## [1.5.107] — 2026-07-03
 
 ### Added

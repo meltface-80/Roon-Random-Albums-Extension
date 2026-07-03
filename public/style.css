@@ -19,6 +19,9 @@
   --accent-soft:  rgba(76,183,230,.15);
   --danger:       #e06464;
   --home-unplayed-bg: #2b3037;   /* pale grey panel on dark */
+  --home-random-bg:   #24322e;   /* teal-grey panel on dark */
+  --home-lotw-bg:     #2f2a38;   /* violet-grey panel on dark */
+  --home-genres-bg:   #33301f;   /* amber-grey panel on dark */
   --shadow-card:  0 2px 6px rgba(0,0,0,.45), 0 10px 24px rgba(0,0,0,.35);
   --shadow-modal: 0 24px 64px rgba(0,0,0,.6);
 }
@@ -34,6 +37,9 @@
   --accent:       #1f8fc1;
   --accent-soft:  rgba(31,143,193,.12);
   --home-unplayed-bg: #d9e8fb;   /* soft blue panel on light */
+  --home-random-bg:   #d6f0e4;   /* soft teal panel on light */
+  --home-lotw-bg:     #ece0f7;   /* soft violet panel on light */
+  --home-genres-bg:   #f6ecd3;   /* soft amber panel on light */
   --danger:       #c0392b;
   --shadow-card:  0 1px 2px rgba(0,0,0,.06), 0 6px 16px rgba(0,0,0,.08);
   --shadow-modal: 0 24px 64px rgba(0,0,0,.18);
@@ -2295,13 +2301,20 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 .home-section-link:hover::after { transform: translateX(3px); }
 .home-section-link:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 3px; border-radius: 4px; }
 
-/* "Not played in 6 months" stands out with a coloured panel: pale grey in
-   dark mode, a soft blue in light mode. */
-.home-section-unplayed {
-  background: var(--home-unplayed-bg);
+/* Each Home section sits in its own softly-tinted panel so the rows read as
+   distinct blocks: grey (unplayed), teal (random), violet (label of the week),
+   amber (genres) — muted in dark mode, pastel in light mode. */
+.home-section-unplayed,
+.home-section-random,
+.home-section-lotw,
+.home-section-genres {
   border-radius: 16px;
   padding: 14px 14px 12px;
 }
+.home-section-unplayed { background: var(--home-unplayed-bg); }
+.home-section-random   { background: var(--home-random-bg); }
+.home-section-lotw     { background: var(--home-lotw-bg); }
+.home-section-genres   { background: var(--home-genres-bg); }
 .home-carousel {
   display: grid;
   grid-auto-flow: column;
@@ -2314,12 +2327,15 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
 .home-carousel::-webkit-scrollbar { display: none; }
 .home-carousel .album { width: auto; flex-shrink: 0; }
-/* Landscape tablets → 2 rows; desktops → 3 rows. */
+/* Unplayed + Random: single row on phones, 2 rows on landscape tablets AND
+   desktops — 2 rows fills the width of wide screens better than 3 short rows. */
 @media (min-width: 768px) and (orientation: landscape) {
   .home-carousel { grid-template-rows: repeat(2, auto); }
 }
+/* Label of the week is a taller carousel: 2 rows on tablets, 3 on desktops,
+   so a featured label's catalogue fills more of the panel. */
 @media (min-width: 1200px) {
-  .home-carousel { grid-template-rows: repeat(3, auto); }
+  .home-carousel-tall { grid-template-rows: repeat(3, auto); }
 }
 .home-carousel-empty { color: var(--text-faint); font-size: 13px; padding: 8px 2px; }
 /* 12 genre buttons divide evenly into 2 / 3 / 4 / 6 columns, so every screen

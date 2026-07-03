@@ -229,6 +229,7 @@
       try { localStorage.removeItem("rra-filter"); } catch (e) {}
     }
     updateCountReadout(null);   // hide the genre/label breadcrumb
+    setBanner(null);            // drop any error/empty banner left by a wall view
     if (homeView) homeView.classList.remove("hidden");
     if (homeSections) homeSections.classList.remove("hidden");  // in case a search hid them
     grid.classList.add("hidden");
@@ -318,7 +319,7 @@
     if (!homeRandom) return;
     homeRandom.innerHTML = '<div class="home-carousel-empty">Loading…</div>';
     try {
-      const r = await fetch("/api/random-albums?count=24");
+      const r = await fetch("/api/random-albums?count=30");
       const j = await r.json();
       const albums = (j && j.albums) || [];
       homeRandom.innerHTML = "";
@@ -368,8 +369,50 @@
     }
   }
 
-  // Header taps: Random albums → full random wall; Label of the week → label view.
+  // Full-screen "Not played in 6 months" grid — reached by tapping the section
+  // header. Fills the main grid with a larger unplayed list (tiles open
+  // unfiltered, like the Home row) and shows a Back button to Home.
+  async function showUnplayedWall() {
+    if (window.__exitLabels) window.__exitLabels();
+    if (activeFilter) { activeFilter = null; try { localStorage.removeItem("rra-filter"); } catch (e) {} }
+    if (homeView) homeView.classList.add("hidden");
+    if (homeSections) homeSections.classList.remove("hidden");
+    grid.classList.remove("hidden");
+    if (typeof clearWallGridSizing === "function") clearWallGridSizing();  // standard grid, not phone-fit wall
+    setTopbarNav(true, false, false);   // Back (to Home), no Refresh, no search
+    setCountText("Not played in 6 months");
+    const m = document.querySelector("main");
+    if (m) m.scrollTop = 0;
+    renderSkeletons(computeAlbumCount());
+    try {
+      const r = await fetch("/api/home/unplayed?months=6&count=96");
+      const j = await r.json();
+      const albums = (j && j.albums) || [];
+      grid.innerHTML = "";
+      if (!albums.length) {
+        setBanner("Nothing here yet — play some music and check back.", false);
+        return;
+      }
+      setBanner(null);
+      const frag = document.createDocumentFragment();
+      for (const a of albums) frag.appendChild(homeTile(a));   // filter:null → offsets resolve
+      grid.appendChild(frag);
+    } catch (e) {
+      grid.innerHTML = "";
+      setBanner("Couldn’t load: " + e.message, true);
+    }
+  }
+
+  // Header taps: Not played → full unplayed grid; Random albums → full random
+  // wall; Label of the week → label view.
   {
+    const unplayedTitle = document.getElementById("home-unplayed-title");
+    if (unplayedTitle) {
+      unplayedTitle.addEventListener("click", showUnplayedWall);
+      unplayedTitle.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showUnplayedWall(); }
+      });
+    }
     const randTitle = document.getElementById("home-random-title");
     if (randTitle) {
       const goRandom = () => { if (window.__applyFilter) window.__applyFilter(null); };

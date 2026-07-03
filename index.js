@@ -3074,10 +3074,11 @@ app.get("/api/home/label-of-the-week", (req, res) => {
         (Date.now() - lotwCache.at) < 60 * 60 * 1000) {
       return res.json(lotwCache.data);
     }
-    // Only feature labels with a reasonable catalogue (>= 3 albums). Sort the
-    // keys so the pick is stable regardless of Map insertion order.
+    // Only feature labels with a fuller catalogue (>= 6 albums) so the carousel
+    // fills out (up to 3 rows on desktop). Sort the keys so the pick is stable
+    // regardless of Map insertion order.
     const keys = [...labelsIndex.map.entries()]
-      .filter(([, e]) => e.albums && e.albums.length >= 3)
+      .filter(([, e]) => e.albums && e.albums.length >= 6)
       .map(([k]) => k)
       .sort();
     if (!keys.length) {
@@ -3120,25 +3121,39 @@ app.get("/api/home/genre-groups", async (req, res) => {
     const parentTitle = parentItem.title.trim();
     await browse({ hierarchy: "genres", item_key: parentItem.item_key, multi_session_key: sessionKey });
     const lvl = await loadLevel(sessionKey, "genres", 1000);
-    // Curated allow-lists over Roon's (AllMusic/Rovi) Pop/Rock sub-genre names.
-    // Test rock/metal FIRST so "Pop-Punk", "Power Pop", "Pop/Rock" land in
-    // Rock/Metal; unmatched styles (Singer/Songwriter, Adult Contemporary,
-    // Easy Listening, New Age, Soft Rock's "adult" strays) are EXCLUDED rather
-    // than dumped into Rock/Metal — that's what caused pop/indie leakage.
-    const METAL_RE = /\b(metal|metalcore|deathcore|grindcore|djent|doom|thrash|black\s*metal|death\s*metal|nu[\s-]?metal|power\s*metal|sludge|hardcore)\b/i;
-    const ROCK_RE  = /\b(rock|punk|grunge|emo|garage|shoegaze|psychedel|prog|krautrock|post[\s-]?rock|noise\s*rock|stoner|surf|rockabilly|glam|new\s*wave|post[\s-]?punk|britpop|math\s*rock|space\s*rock|jam\s*band)\b/i;
-    const INDIE_ROCK_RE = /\bindie\b(?!\s*pop)|alternative\/indie/i;   // Indie Rock yes, Indie Pop no
-    const POP_RE   = /\bpop\b/i;
+    // Curated classification of Roon's (AllMusic/Rovi) "Pop/Rock" sub-genre
+    // names. The trap that caused Carole King, Madonna, James Taylor and Duran
+    // Duran to show under Rock/Metal: the word "rock" appears in many SOFT/POP
+    // styles ("Soft Rock", "Contemporary Pop/Rock", "Adult Alternative
+    // Pop/Rock", "Folk-Rock"), so a bare /rock/ test mis-routed them. The rules,
+    // in priority order:
+    //   1. Generic catch-alls ("Pop/Rock", "Rock") every album carries → skip.
+    //   2. Anything with the literal word "pop" → Pop (Contemporary Pop/Rock,
+    //      Indie Pop, Dance-Pop, AM Pop, Power Pop, Pop-Punk, …).
+    //   3. Soft styles with no "pop" (Soft Rock, Folk-Rock, Adult Contemporary,
+    //      Singer/Songwriter, Easy Listening, New Age) → excluded (too soft to
+    //      feature, and never Rock/Metal).
+    //   4. Genuinely hard, guitar-driven styles → Rock/Metal (strict list).
+    //   5. Remaining pop-family styles (Dance, Disco, Synth, New Wave, Soul,
+    //      R&B, Funk, Motown) → Pop.
+    //   6. Anything else → excluded.
+    const CATCHALL_RE = /^(pop\s*\/\s*rock|rock)$/i;
+    const SOFT_RE = /\b(soft\s*rock|folk[\s-]?rock|country[\s-]?rock|adult\s*contemporary|adult\s*alternative|easy\s*listening|singer[\s\/-]*songwriter|new\s*age|lounge|mood\s*music|smooth\s*jazz|yacht\s*rock)\b/i;
+    const HARD_RE = /\b(metal|metalcore|deathcore|grindcore|djent|thrash|sludge|doom|nu[\s-]?metal|power\s*metal|black\s*metal|death\s*metal|speed\s*metal|hair\s*metal|hard\s*rock|album\s*rock|arena\s*rock|classic\s*rock|heartland\s*rock|roots\s*rock|blues[\s-]?rock|southern\s*rock|stoner|space\s*rock|noise\s*rock|math\s*rock|post[\s-]?rock|prog|art\s*rock|krautrock|psychedelic|psychedelia|britpop|grunge|post[\s-]?grunge|punk|hardcore|emo|shoegaze|indie\s*rock|\bindie\b|alternative\s*rock|alternative\/indie|college\s*rock|garage|rockabilly|surf|glam|goth|industrial|ska|rap[\s-]?rock|rap[\s-]?metal|jam\s*band|rock\s*&\s*roll|rock\s*and\s*roll)\b/i;
+    const POPFAM_RE = /\b(pop|dance|disco|synth|new\s*wave|new\s*romantic|electropop|r&b|rhythm\s*&\s*blues|soul|motown|funk|boy\s*band|teen|bubblegum|quiet\s*storm|urban)\b/i;
     const pop = [], rockmetal = [];
     for (const it of lvl.items) {
       const title = (it.title || "").trim();
       if (!title || it.hint === "header") continue;
       if (/^albums$/i.test(title)) continue;          // the "Albums" child, not a sub-genre
+      if (CATCHALL_RE.test(title)) continue;          // generic catch-all, not a real style
       const m = /(\d[\d,]*)\s*albums?/i.exec(it.subtitle || "");
       const entry = { title, count: m ? parseInt(m[1].replace(/,/g, ""), 10) : 0 };
-      if (METAL_RE.test(title) || ROCK_RE.test(title) || INDIE_ROCK_RE.test(title)) rockmetal.push(entry);
-      else if (POP_RE.test(title)) pop.push(entry);
-      // else: excluded (singer/songwriter, adult contemporary, easy listening, …)
+      if (/\bpop\b/i.test(title)) pop.push(entry);    // anything "…Pop…" is pop
+      else if (SOFT_RE.test(title)) { /* soft, no "pop" → excluded (never Rock/Metal) */ }
+      else if (HARD_RE.test(title)) rockmetal.push(entry);
+      else if (POPFAM_RE.test(title)) pop.push(entry);
+      // else: excluded (unclassifiable)
     }
     const byCount = (a, b) => (b.count || 0) - (a.count || 0);
     pop.sort(byCount); rockmetal.sort(byCount);
