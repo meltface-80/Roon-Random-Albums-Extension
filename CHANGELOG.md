@@ -2,6 +2,14 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.115] — 2026-07-04
+
+### Added
+- **"Label of the week" panel now has a tag watermark** — a solid price/luggage-tag silhouette (with its string hole), matching the clock and vinyl in size, rotation and top-left cut-off crop.
+
+### Changed
+- **All Home watermarks are now solid-filled silhouettes instead of thin outlines**, so they stand out more — the clock (Not played), vinyl record (Random albums) and tag (Label of the week). Slightly higher opacity too. Still clipped inside each coloured panel, theme-aware, behind the tiles, non-interactive.
+
 ## [1.5.114] — 2026-07-04
 
 ### Added

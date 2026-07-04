@@ -2316,21 +2316,25 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 .home-section-lotw     { background: var(--home-lotw-bg); }
 .home-section-genres   { background: var(--home-genres-bg); }
 
-/* Faint themed watermark for a section's panel — a large, rotated line-art
-   motif CROPPED by the panel's top-left corner (overflow:hidden) so it reads as a
-   bold cut-off detail contained entirely WITHIN the coloured section (never
-   spilling onto the page). Each section carries a motif matching its theme:
+/* Faint themed watermark for a section's panel — a large, rotated, SOLID-fill
+   line-art motif CROPPED by the panel's top-left corner (overflow:hidden) so it
+   reads as a bold cut-off detail contained entirely WITHIN the coloured section
+   (never spilling onto the page). Each section carries a motif matching its theme:
    "Not played in 6 months" -> a clock (time gone by); "Random albums" -> a vinyl
-   record. The art sits behind the title + carousel (z-index:0 vs 1), never
-   intercepts taps (pointer-events:none), and — thanks to overflow:hidden — can
-   never produce a scrollbar. Shared placement lives in the grouped rules; only
-   the background-image differs per section/theme. */
+   record; "Label of the week" -> a price/luggage tag. Solid silhouettes (not thin
+   outlines) so they stand out. The art sits behind the title + carousel (z-index:0
+   vs 1), never intercepts taps (pointer-events:none), and — thanks to
+   overflow:hidden — can never produce a scrollbar. Shared placement lives in the
+   grouped rules; only the background-image differs per section/theme. */
 .home-section-unplayed,
-.home-section-random { position: relative; overflow: hidden; }
+.home-section-random,
+.home-section-lotw { position: relative; overflow: hidden; }
 .home-section-unplayed > *,
-.home-section-random > * { position: relative; z-index: 1; }
+.home-section-random > *,
+.home-section-lotw > * { position: relative; z-index: 1; }
 .home-section-unplayed::before,
-.home-section-random::before {
+.home-section-random::before,
+.home-section-lotw::before {
   content: "";
   position: absolute;
   top: -92px;
@@ -2341,18 +2345,22 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   background-position: center;
   background-size: contain;
   background-repeat: no-repeat;
-  opacity: .08;
+  opacity: .11;
   pointer-events: none;
   z-index: 0;
 }
 [data-theme="light"] .home-section-unplayed::before,
-[data-theme="light"] .home-section-random::before { opacity: .12; }
+[data-theme="light"] .home-section-random::before,
+[data-theme="light"] .home-section-lotw::before { opacity: .14; }
 /* "Not played in 6 months" — clock. */
-.home-section-unplayed::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'none'%20stroke%3D'%23ffffff'%20stroke-width%3D'3.6'%20stroke-linecap%3D'round'%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'72'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'4.5'%20fill%3D'%23ffffff'%20stroke%3D'none'%2F%3E%3Cg%20stroke-width%3D'3.6'%3E%3Cline%20x1%3D'100'%20y1%3D'26'%20x2%3D'100'%20y2%3D'40'%2F%3E%3Cline%20x1%3D'174'%20y1%3D'100'%20x2%3D'160'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'174'%20x2%3D'100'%20y2%3D'160'%2F%3E%3Cline%20x1%3D'26'%20y1%3D'100'%20x2%3D'40'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'50'%20x2%3D'143'%20y2%3D'57'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'150'%20x2%3D'143'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'150'%20x2%3D'57'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'50'%20x2%3D'57'%20y2%3D'57'%2F%3E%3C%2Fg%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'56'%20stroke-width%3D'4.8'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'136'%20y2%3D'120'%20stroke-width%3D'4.8'%2F%3E%3Cpath%20d%3D'M100%2010%20A90%2090%200%200%201%20180%2056'%20stroke-width%3D'2.9'%20opacity%3D'.8'%2F%3E%3Cpath%20d%3D'M190%20100%20A90%2090%200%200%201%20150%20178'%20stroke-width%3D'2.9'%20opacity%3D'.55'%2F%3E%3C%2Fsvg%3E"); }
-[data-theme="light"] .home-section-unplayed::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'none'%20stroke%3D'%231a2740'%20stroke-width%3D'3.6'%20stroke-linecap%3D'round'%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'72'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'4.5'%20fill%3D'%231a2740'%20stroke%3D'none'%2F%3E%3Cg%20stroke-width%3D'3.6'%3E%3Cline%20x1%3D'100'%20y1%3D'26'%20x2%3D'100'%20y2%3D'40'%2F%3E%3Cline%20x1%3D'174'%20y1%3D'100'%20x2%3D'160'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'174'%20x2%3D'100'%20y2%3D'160'%2F%3E%3Cline%20x1%3D'26'%20y1%3D'100'%20x2%3D'40'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'50'%20x2%3D'143'%20y2%3D'57'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'150'%20x2%3D'143'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'150'%20x2%3D'57'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'50'%20x2%3D'57'%20y2%3D'57'%2F%3E%3C%2Fg%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'56'%20stroke-width%3D'4.8'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'136'%20y2%3D'120'%20stroke-width%3D'4.8'%2F%3E%3Cpath%20d%3D'M100%2010%20A90%2090%200%200%201%20180%2056'%20stroke-width%3D'2.9'%20opacity%3D'.8'%2F%3E%3Cpath%20d%3D'M190%20100%20A90%2090%200%200%201%20150%20178'%20stroke-width%3D'2.9'%20opacity%3D'.55'%2F%3E%3C%2Fsvg%3E"); }
+.home-section-unplayed::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2040%20a60%2060%200%201%200%200%20120%20a60%2060%200%201%200%200%20-120%20Z'%2F%3E%3Cpath%20d%3D'M100%2045.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M151%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M100%20147.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M49%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'6'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'62'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'120'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E"); }
+[data-theme="light"] .home-section-unplayed::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%231a2740'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2040%20a60%2060%200%201%200%200%20120%20a60%2060%200%201%200%200%20-120%20Z'%2F%3E%3Cpath%20d%3D'M100%2045.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M151%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M100%20147.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M49%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'6'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'62'%20stroke%3D'%231a2740'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'120'%20stroke%3D'%231a2740'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E"); }
 /* "Random albums" — vinyl record. */
-.home-section-random::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'none'%20stroke%3D'%23ffffff'%20stroke-width%3D'3.6'%20stroke-linecap%3D'round'%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'72'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'61'%20stroke-width%3D'2.6'%20opacity%3D'.7'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'50'%20stroke-width%3D'2.6'%20opacity%3D'.7'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'39'%20stroke-width%3D'2.6'%20opacity%3D'.7'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'23'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'4'%20fill%3D'%23ffffff'%20stroke%3D'none'%2F%3E%3Cpath%20d%3D'M54%2074%20A72%2072%200%200%201%2086%2050'%20stroke-width%3D'4'%20opacity%3D'.8'%2F%3E%3Cpath%20d%3D'M62%20118%20A44%2044%200%200%201%2078%20134'%20stroke-width%3D'3.2'%20opacity%3D'.55'%2F%3E%3C%2Fsvg%3E"); }
-[data-theme="light"] .home-section-random::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'none'%20stroke%3D'%231a2740'%20stroke-width%3D'3.6'%20stroke-linecap%3D'round'%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'72'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'61'%20stroke-width%3D'2.6'%20opacity%3D'.7'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'50'%20stroke-width%3D'2.6'%20opacity%3D'.7'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'39'%20stroke-width%3D'2.6'%20opacity%3D'.7'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'23'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'4'%20fill%3D'%231a2740'%20stroke%3D'none'%2F%3E%3Cpath%20d%3D'M54%2074%20A72%2072%200%200%201%2086%2050'%20stroke-width%3D'4'%20opacity%3D'.8'%2F%3E%3Cpath%20d%3D'M62%20118%20A44%2044%200%200%201%2078%20134'%20stroke-width%3D'3.2'%20opacity%3D'.55'%2F%3E%3C%2Fsvg%3E"); }
+.home-section-random::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2075%20a25%2025%200%201%200%200%2050%20a25%2025%200%201%200%200%20-50%20Z'%2F%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2081%20a19%2019%200%201%200%200%2038%20a19%2019%200%201%200%200%20-38%20Z%20M100%2095.5%20a4.5%204.5%200%201%200%200%209%20a4.5%204.5%200%201%200%200%20-9%20Z'%2F%3E%3C%2Fsvg%3E"); }
+[data-theme="light"] .home-section-random::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%231a2740'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2075%20a25%2025%200%201%200%200%2050%20a25%2025%200%201%200%200%20-50%20Z'%2F%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2081%20a19%2019%200%201%200%200%2038%20a19%2019%200%201%200%200%20-38%20Z%20M100%2095.5%20a4.5%204.5%200%201%200%200%209%20a4.5%204.5%200%201%200%200%20-9%20Z'%2F%3E%3C%2Fsvg%3E"); }
+/* "Label of the week" — price/luggage tag. */
+.home-section-lotw::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M104.88%2021.55A16.67%2016.67%200%200%200%2093.1%2016.67H33.33A16.67%2016.67%200%200%200%2016.67%2033.33V93.1a16.67%2016.67%200%200%200%204.88%2011.78l72.53%2072.53a20.22%2020.22%200%200%200%2028.5%200l54.83-54.83a20.22%2020.22%200%200%200%200-28.5Z%20M62.5%2051.5%20a11%2011%200%201%200%200%2022%20a11%2011%200%201%200%200%20-22%20Z'%2F%3E%3C%2Fsvg%3E"); }
+[data-theme="light"] .home-section-lotw::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%231a2740'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M104.88%2021.55A16.67%2016.67%200%200%200%2093.1%2016.67H33.33A16.67%2016.67%200%200%200%2016.67%2033.33V93.1a16.67%2016.67%200%200%200%204.88%2011.78l72.53%2072.53a20.22%2020.22%200%200%200%2028.5%200l54.83-54.83a20.22%2020.22%200%200%200%200-28.5Z%20M62.5%2051.5%20a11%2011%200%201%200%200%2022%20a11%2011%200%201%200%200%20-22%20Z'%2F%3E%3C%2Fsvg%3E"); }
 .home-carousel {
   display: grid;
   grid-auto-flow: column;
