@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.112] — 2026-07-04
+
+### Changed
+- **The "Not played in 6 months" clock watermark now has real artistic flair.** It's larger, tilted, and moved to the **start (top-left) of the bar**, where it deliberately spills **outside** the coloured panel onto the page — and it's a proper clock face with tick marks, hands, and sweeping motion arcs (time flying by). The spill is up-and-left only, so it never adds a horizontal scrollbar on any screen; the title stays fully legible above it; theme-aware and non-interactive as before.
+
 ## [1.5.111] — 2026-07-04
 
 ### Added
