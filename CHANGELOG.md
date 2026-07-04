@@ -2,6 +2,156 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.0] — 2026-07-04
+
+### Fixed (found by an 8-angle multi-agent review of the v1.5.101–116 Home redesign)
+- **A genre/tag filter no longer gets silently wiped on reload.** `bootstrap()` always landed on unfiltered Home after pairing, and `showHome()` unconditionally cleared any filter restored from `localStorage` — so reopening the app after filtering to a genre always dropped back to unfiltered Home and deleted the saved filter. A restored filter now re-opens the filtered wall instead.
+- **"Browse by genre" could get stuck empty for the rest of the session** after a single transient load failure — the "loaded once" flag was set before the fetch resolved, unlike the sibling "Label of the week" row, which already retried correctly. It now only marks itself loaded once genres actually render, so a cold-cache or network blip on the first Home visit no longer permanently disables the section.
+- **Roon Core disconnecting mid-session showed misleading empty states on Home** ("Nothing here yet", "No albums.", "Couldn't load genres.") instead of a "Waiting for Roon Core" message — four of the five Home data loaders never checked for the 503 "not paired" response the way the older wall loader always has. All four now show the same Roon-disconnected message.
+- **Opening a second artist view after an improper exit could restore corrupted content.** `artistViewActive` and its DOM snapshot were never cleared by `showHome()`/`showWall()` (unlike the equivalent `labelsActive` flag), so leaving an artist view via the shared Back button left it stuck active; a second artist view opened afterward would restore the first view's stale snapshot on exit instead of Home. `showHome()`/`showWall()` now exit the artist view the same way they already exit the Labels browser.
+- **The artist view never synced the shared top bar**, so depending on where you opened it from, either a second empty back affordance or none at all sat next to its own "← Back" button. It now hides the shared Back/Refresh/Search on entry and restores whatever the previous screen had on exit.
+- **A resize (iOS Safari's URL bar collapsing, iPad split-view) could silently replace an active search or the "Not played" full grid with the random wall** — the resize handler only excluded the Labels browser. It now also skips Home, an active search, and the unplayed-wall view.
+- **A search query left visible when the user detoured through Labels** — leaving Home for the Labels browser and returning didn't clear the search box, so a stale query reappeared even though its results had already been discarded. `showHome()`, `showLabelsList()`, and `showLabelAlbums()` now clear search state the same way the wall view already does.
+- **Search result-count/progress text ("3 albums, 1 label", "Building index… NN%") was permanently invisible** on Home's relocated search box — a leftover `search-status-hidden` class unconditionally hid it regardless of content.
+- **The "Random albums" row re-fetched ~30 albums with fully sequential Roon round-trips on every single Home visit** (menu → Home, or the Back button), not just once on first load as before the Home redesign — a visible delay on every revisit. The album loads are now batched (8 at a time) instead of one-by-one.
+- Tapping an artist name on an album opened from inside the Labels browser could leave the Labels-browser flag stuck active while viewing the artist; it's now cleared the same way the equivalent search result chip already does.
+
+### Changed (reuse / simplification, same review)
+- Deduplicated a hand-rolled cache, a SQL "played since" query, an FNV-1a hash loop, and an album-count regex that each existed in two places — now shared helpers (`makeTtlCache`, `getPlayedTitlesSince`, `fnv1aHash`, `parseAlbumCount`).
+- Removed dead code left over from the Home redesign: an unused `sessionStorage` cache, the fully-unused `openSearch`/`closeSearch` functions and their inert `#search-toggle` button, a no-op `loadAlbumCount()`, and an unnecessary `typeof` guard.
+- The four Home watermarks (clock/vinyl/tag/note) now each ship one SVG used as a CSS mask (with a `-webkit-mask-image` fallback) instead of two near-identical SVGs per motif for light/dark — the theme swap is now a color change, not a second image.
+- Two silent `catch (e) {}` blocks now carry the explanatory comment this project's conventions require.
+
+## [1.5.116] — 2026-07-04
+
+### Added
+- **"Browse by genre" panel now has a music-note watermark** — solid-filled beamed eighth notes, matching the clock, vinyl and tag watermarks in size, rotation, opacity and top-left cut-off crop. All four Home sections now carry a themed watermark.
+
+## [1.5.115] — 2026-07-04
+
+### Added
+- **"Label of the week" panel now has a tag watermark** — a solid price/luggage-tag silhouette (with its string hole), matching the clock and vinyl in size, rotation and top-left cut-off crop.
+
+### Changed
+- **All Home watermarks are now solid-filled silhouettes instead of thin outlines**, so they stand out more — the clock (Not played), vinyl record (Random albums) and tag (Label of the week). Slightly higher opacity too. Still clipped inside each coloured panel, theme-aware, behind the tiles, non-interactive.
+
+## [1.5.114] — 2026-07-04
+
+### Added
+- **"Random albums" panel now has a vinyl-record watermark** — a line-art record (grooves, centre label, spindle hole, a shine glint) cropped at the panel's top-left corner, matching the clock's size, rotation, thickness and cut-off effect. Contained within the coloured section, theme-aware, behind the tiles, non-interactive. The two panels' watermarks now share one set of placement rules (only the artwork differs), ready for the remaining sections.
+
+## [1.5.113] — 2026-07-04
+
+### Changed
+- **"Not played in 6 months" clock watermark is now contained within the coloured panel** — it no longer spills onto the page outside the section. The cut-off crop at the panel's top-left corner is kept (that's the effect you liked), but the art is clipped to the panel. The clock is also **bigger** and drawn with **slightly thicker lines**.
+
+## [1.5.112] — 2026-07-04
+
+### Changed
+- **The "Not played in 6 months" clock watermark now has real artistic flair.** It's larger, tilted, and moved to the **start (top-left) of the bar**, where it deliberately spills **outside** the coloured panel onto the page — and it's a proper clock face with tick marks, hands, and sweeping motion arcs (time flying by). The spill is up-and-left only, so it never adds a horizontal scrollbar on any screen; the title stays fully legible above it; theme-aware and non-interactive as before.
+
+## [1.5.111] — 2026-07-04
+
+### Added
+- **Faint themed artwork on the "Not played in 6 months" panel** — a subtle line-art clock watermark (time gone by) now sits behind that section's coloured panel, reflecting its theme. It's a self-contained inline SVG (no external requests), theme-aware (light art on the dark panel, dark art on the light panel), clipped to the rounded panel, and sits behind the tiles at very low opacity so it never obscures album art or intercepts taps. First of the coloured sections to get themed art.
+
+## [1.5.110] — 2026-07-04
+
+### Fixed
+- **Tapping an artist in Search now shows that artist's albums again** (their own albums plus "Also appears on"), instead of falling back to the Home sections. Regression from the Home-landing redesign: the search artist-chip clears and hides the results grid before opening the artist view, but the artist view rendered its albums into that still-hidden grid while the Home rows showed through. The artist view now reveals the grid and hides the Home view, and its "← Back" button restores exactly the screen you came from (the Home landing, or the album wall you were browsing).
+
+## [1.5.109] — 2026-07-03
+
+### Fixed
+- **"Label of the week" now shows as a single-row carousel on every screen** (phone, landscape tablet, desktop). On desktop it was wrongly wrapping to 3 rows and leaving a large empty area; it's now one horizontal row that scrolls, like the other rows.
+- **"Not played in 6 months" and "Random albums" rows are centred** in their panels when the albums don't fill the full width, instead of hugging the left edge (`justify-content: safe center` — still left-aligns and scrolls when the row overflows, so nothing is clipped).
+
+## [1.5.108] — 2026-07-03
+
+### Fixed
+- **Rock/Metal no longer pulls in soft-rock, singer-songwriter and pop albums** (Carole King – Tapestry, James Taylor, Madonna, Duran Duran, Bryan Ferry, Ultravox). The old rule keyed on the word "rock", which appears in soft/pop styles ("Soft Rock", "Contemporary Pop/Rock", "Adult Alternative Pop/Rock", "Folk-Rock"), so those leaked in. The classifier now: (1) skips the generic "Pop/Rock" catch-all; (2) routes anything with the literal word "pop" to Pop; (3) excludes soft styles with no "pop" (Soft Rock, Folk-Rock, Adult Contemporary, Singer/Songwriter, Easy Listening, New Age); (4) sends only genuinely hard, guitar-driven styles (metal, hard/album/arena/classic/garage rock, punk, grunge, prog, psychedelic, shoegaze, indie rock, britpop, goth, industrial, ska, rap-rock…) to Rock/Metal; (5) sends remaining pop-family styles (Dance, Disco, Synth, New Wave, Soul, R&B, Funk, Motown) to Pop.
+
+### Added
+- **"Not played in 6 months" title is now a button** — tap the section header to open a full-screen grid of albums you haven't played in 6 months (up to 96), with a Back button to Home.
+
+### Changed
+- **Desktop: "Not played in 6 months" and "Random albums" now fill the width** — 2 rows on desktop (was 3 short, half-empty rows) so wide screens show more albums per row. Phones/tablets unchanged. The Home "Random albums" row now fetches 30 albums (was 24).
+- **"Label of the week" carousel is taller** — 1 row on phones, 2 on tablets, 3 on desktops — and now features labels with at least 6 albums (was 3) so the row fills out.
+- **Each Home section has its own tinted panel** — grey (not played), teal (random), violet (label of the week), amber (browse by genre) — muted in dark mode, pastel in light mode, so the sections read as distinct blocks.
+
+## [1.5.107] — 2026-07-03
+
+### Added
+- **"Random albums" on the Home screen** — the random-albums shuffle (previously only in the side menu) now also appears as a Home carousel of 24 random albums, refreshed on every Home visit so it's always freshly random. Tapping the **Random albums ›** header opens the full random wall. Reuses the existing `/api/random-albums` endpoint (no new backend).
+- **"Label of the week" on the Home screen** — one record label is featured for the whole ISO week (Mon–Sun), chosen deterministically so it's stable all week and rotates every Monday. Shows a carousel of that label's albums; tapping the **Label of the week: … ›** header opens the full label view. New endpoint `GET /api/home/label-of-the-week` (labels with ≥ 3 albums, deterministic per-week pick, cached ~1h). The section stays hidden until the background labels scan has produced a qualifying label, then retries each visit until it populates.
+- Both new sections reuse the responsive `.home-carousel` layout: single row on phones, 2 rows on landscape tablets, 3 rows on desktops.
+
+### Changed
+- **Better separation of Rock/Metal from Pop in "Browse by genre"** — the old rule ("any Pop/Rock sub-genre without 'pop' in its name → Rock/Metal") swept in indie-pop, singer/songwriter and adult-contemporary styles. The classifier now uses curated allow-lists: rock/metal sub-genres (metal, punk, grunge, prog, shoegaze, indie rock, …) go to **Rock/Metal**, pop sub-genres go to **Pop**, and unrelated styles (Singer/Songwriter, Adult Contemporary, Easy Listening, …) are excluded rather than dumped into Rock/Metal.
+- **"Browse by genre" now shows an even 12 buttons** so the grid rows are balanced on every screen. Rock/Metal and Pop are guaranteed slots; the rest are the library's biggest genres. Column counts adjusted (2 / 3 / 4 / 6) so 12 buttons always fill full rows with no lone trailing card.
+
+## [1.5.106] — 2026-07-03
+
+### Changed
+- **"Browse by genre": the Pop/Rock parent is split into "Rock/Metal" and "Pop" buttons.** Roon files rock, metal, punk, indie, etc. as sub-genres under a single "Pop/Rock" parent. The Home genre buttons now split it: sub-genres whose name contains "pop" form the **Pop** button, everything else forms the **Rock/Metal** button. Tapping a button picks a random sub-genre from that group (weighted by album count) and shows its albums; the top-bar breadcrumb shows the group name. This replaces the earlier R&B→Metal swap (Metal is a Pop/Rock sub-genre, now reachable via Rock/Metal).
+- **Nested genre filter** — the genre filter now supports a parent (`filter_parent`), so a sub-genre nested under a parent genre resolves correctly across browse, album detail, and play. New endpoint `GET /api/home/genre-groups` enumerates and classifies the Pop/Rock sub-genres (cached 30 min).
+
+## [1.5.105] — 2026-07-03 — Home redesign (phase 2 fixes)
+
+### Fixed
+- **"Album not found at offset …" when opening a Home tile after viewing a genre** — and the related **genre name lingering in the top bar back on Home**. Both had the same cause: the active genre filter wasn't cleared when returning to Home, so Home's full-library album offsets were resolved against the (smaller) genre-filtered list and fell out of range. Returning to Home now clears the filter (and its breadcrumb), and Home tiles always open unfiltered regardless of any active filter.
+
+### Changed
+- **Search box moved into the top bar**, beside the hamburger (both visible), on the Home screen — instead of sitting in the Home content.
+- **"Browse by genre": R&B replaced with Metal** — the R&B card is swapped for the library's Metal genre (or dropped if there's no Metal genre).
+
+### Added
+- **Album of the day** — one completely random album shown first in the "Not played in 6 months" row, chosen fresh each day (stable through the day). On iPad/desktop it appears once, top-left. Once you've played it, it disappears until tomorrow's pick. New endpoint `GET /api/home/album-of-the-day`.
+
+## [1.5.104] — 2026-07-03 — Home redesign (phase 2)
+
+### Changed
+- **Album counts removed from every screen** — the topbar breadcrumb now shows just the genre/label name (no "N albums"), the labels list header shows "Labels" (no count), and the library-total line was removed from Settings.
+- **Search moved to the top of the Home screen** — a permanent search box sits above the Home sections instead of living in the side menu. Typing shows results in place of the sections (the box stays put); clearing returns to the sections. The Search item was removed from the side menu.
+- **Play Now no longer closes the album view** — playing (Play Now / Shuffle / Radio) from an album's detail page keeps the page open so you stay on the album.
+- **"Not played in 6 months" fills more of the screen on bigger displays** — single row on phones, **2 rows on landscape tablets**, **3 rows on desktops** (horizontally scrollable), and the section now fetches enough albums to fill them.
+- **"Not played in 6 months" stands out with a coloured panel** — a pale grey panel in dark mode, a soft blue panel in light mode.
+
+### Added
+- **Back-to-Home button** in the top bar, shown on every screen you navigate to from Home (random wall, genre grid, labels).
+- **Refresh (shuffle) button** in the top bar, shown on the random-album and genre grid screens — reshuffles the current grid (keeps the active genre).
+
+### Dev
+- Added `scratchpad/smoke.js` runs to pre-flight — a DOM-stub harness that executes the app's top-level IIFEs and fails on any startup throw (the v1.5.103 crash class).
+
+## [1.5.103] — 2026-07-03
+
+### Fixed
+- **Blank screen on load (startup crash).** `let albumCount = computeAlbumCount()` runs during the app's initialisation, but `computeAlbumCount` references the `const PHONE_WALL` that was declared *after* it — a temporal dead zone. On phones this threw `ReferenceError: Cannot access 'PHONE_WALL' before initialization`, which aborted the whole app IIFE, so nothing rendered (blank page, not even the "Waiting for Roon" banner). Moved the `PHONE_WALL` declaration above its first use. (Latent since v1.5.101; exposed once the Home view depended on the same init path completing.)
+- **Error class:** the v1.5.66 "declaration-after-use temporal-dead-zone" startup-crash class. `node --check` can't catch it (it's valid syntax), and there's no browser in the build environment to run the load-time check. Added a DOM-stub smoke harness (`scratchpad/smoke.js`) that executes the app's top-level IIFEs under a stubbed `window`/`document` and fails on any synchronous startup throw — it reproduces this exact error on the broken build and passes on the fix.
+
+## [1.5.102] — 2026-07-03
+
+### Added — Home redesign (phase 1)
+- **Home landing page with sections.** The app now opens on a Home view instead of the raw album wall:
+  - **"Not played in 6 months"** — a horizontal carousel of albums with no play in the last 6 months (backed by the play history), reusing the standard album tile → detail modal (all metadata retained). New endpoint `GET /api/home/unplayed?months=6&count=N`.
+  - **"Browse by genre"** — the top 10 library genres (biggest first) as cards; tapping one opens that genre in the album wall at the device-appropriate grid size. Reuses the existing genre filter and `/api/filters/genres`.
+- **Pop-out side menu (hamburger).** A drawer slides in from the left. **All former top-bar buttons now live in the menu as icon + label** — Filter, Labels, Qobuz, Tidal (shown only when connected), Play something unheard, Search, Settings — plus **Home** and **Random albums**. The top bar now shows just the hamburger, decluttering it. Menu items trigger the original controls (unchanged behavior); backdrop tap and Escape close the drawer.
+- The album wall is reached from the menu ("Random albums") or by tapping a genre/filter; it loads lazily on first entry and keeps the v1.5.101 phone-fit sizing.
+
+### Notes
+- This is phase 1 of the redesign. Still to come: separate Qobuz/Tidal "new releases in the last 30 days" carousels (excluding albums already in your library), and a Pitchfork magazine area.
+
+## [1.5.101] — 2026-07-02
+
+### Changed
+- **Phone portrait wall now shows 4 rows, fitted to the screen without scrolling** — the wall targets 4 rows of 3 albums (12 total) and sizes the artwork to exactly fit the visible area. When the layout is width-limited the tiles stay at their natural full size; only when the viewport is short does the art shrink a little so all 4 rows still fit rather than overflowing into a scroll. Falls back to 3 rows on very short phones (art would otherwise get too small). Re-fits on viewport resize.
+- **Slightly shorter mini transport bar** — trimmed vertical padding (13→10px) and phone button sizes, and reduced the reserved clearance below the wall (96→80px), giving the grid more room for the 4th row.
+
+### Fixed
+- **Wall row count under-filled on tall phones** — the previous measurement divided by `main.clientHeight` (which includes the padding reserved for the transport) and, on the very first call, ran before layout and fell back to a guess — so tall phones under-filled to 3 rows with dead space below. The new sizing measures the true content box (subtracting `main`'s padding) and derives the tile size that makes the target rows fit, so the outcome no longer depends on call timing.
+- **Error class:** measurement-vs-layout mismatch (dividing by a height that included reserved padding, plus a pre-layout first call). Resolved by measuring the real content box and solving for tile size instead of counting rows against an approximate height.
+
 ## [1.5.100] — 2026-07-02
 
 ### Changed

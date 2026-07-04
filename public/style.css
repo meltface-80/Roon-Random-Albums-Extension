@@ -18,6 +18,10 @@
   --accent:       #4cb7e6;
   --accent-soft:  rgba(76,183,230,.15);
   --danger:       #e06464;
+  --home-unplayed-bg: #2b3037;   /* pale grey panel on dark */
+  --home-random-bg:   #24322e;   /* teal-grey panel on dark */
+  --home-lotw-bg:     #2f2a38;   /* violet-grey panel on dark */
+  --home-genres-bg:   #33301f;   /* amber-grey panel on dark */
   --shadow-card:  0 2px 6px rgba(0,0,0,.45), 0 10px 24px rgba(0,0,0,.35);
   --shadow-modal: 0 24px 64px rgba(0,0,0,.6);
 }
@@ -32,6 +36,10 @@
   --text-faint:   #8c919a;
   --accent:       #1f8fc1;
   --accent-soft:  rgba(31,143,193,.12);
+  --home-unplayed-bg: #d9e8fb;   /* soft blue panel on light */
+  --home-random-bg:   #d6f0e4;   /* soft teal panel on light */
+  --home-lotw-bg:     #ece0f7;   /* soft violet panel on light */
+  --home-genres-bg:   #f6ecd3;   /* soft amber panel on light */
   --danger:       #c0392b;
   --shadow-card:  0 1px 2px rgba(0,0,0,.06), 0 6px 16px rgba(0,0,0,.08);
   --shadow-modal: 0 24px 64px rgba(0,0,0,.18);
@@ -86,9 +94,11 @@ button { font-family: inherit; }
   border-bottom: 1px solid var(--border);
 }
 .topbar-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px;
+  display: flex; align-items: center; justify-content: flex-start;
+  gap: 10px;
 }
+/* Refresh sits at the far right of the top bar. */
+#topbar-refresh { margin-left: auto; }
 [data-theme="light"] .topbar { background: rgba(246,245,242,.85); }
 
 .album-count {
@@ -201,12 +211,6 @@ button { font-family: inherit; }
 @keyframes searchReveal {
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: none; }
-}
-/* Magnifier toggle takes on the accent when the bar is open */
-#search-toggle.is-active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-soft);
 }
 .search-box {
   flex: 1 1 auto; min-width: 0;
@@ -532,7 +536,7 @@ main {
    specificity means source order decides. */
 @media (max-width: 767px) {
   .album-grid { gap: 12px 8px; }
-  .album-meta { margin-top: 6px; gap: 1px; }
+  .album-meta { margin-top: 5px; gap: 1px; }
   .album-title {
     font-size: 12px; line-height: 1.25;
     display: -webkit-box;
@@ -541,6 +545,20 @@ main {
     overflow: hidden;
   }
   .album-artist { font-size: 10.5px; }
+}
+
+/* Phone portrait: fill the visible wall with exactly N rows (target 4) without
+   scrolling. app.js (measurePhoneWall) sets --phone-art to the largest square
+   art size that lets the target rows fit the measured content box, and adds
+   .phone-fit. When the wall is width-limited the art is the natural third-of-
+   width (no shrink); when height-limited the art shrinks a little so the rows
+   still fit instead of overflowing. Class is added only for the album wall on
+   phones (removed in the labels browser and on tablet/desktop). */
+.album-grid.phone-fit {
+  grid-template-columns: repeat(3, var(--phone-art, 1fr));
+  justify-content: center;
+  column-gap: 8px;
+  row-gap: 10px;
 }
 
 /* Skeleton */
@@ -1289,8 +1307,8 @@ main {
 /*  Mini transport — Roon-style sizing                                 */
 /* ------------------------------------------------------------------ */
 .mini-transport {
-  padding: 13px 14px;
-  padding-bottom: calc(13px + env(safe-area-inset-bottom));
+  padding: 10px 14px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
 .mt-info { gap: 13px; }
 .mt-info { cursor: pointer; }  /* tappable to open the now-playing screen */
@@ -1302,15 +1320,15 @@ main {
 .mt-playpause { width: 54px; height: 54px; }
 .mt-playpause svg { width: 32px; height: 32px; }
 
-main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
 @media (max-width: 480px) {
   .mt-info { gap: 11px; }
   .mt-controls { gap: 2px; }
-  .mt-btn { width: 48px; height: 48px; }
-  .mt-btn svg { width: 28px; height: 28px; }
-  .mt-playpause { width: 50px; height: 50px; }
-  .mt-playpause svg { width: 30px; height: 30px; }
+  .mt-btn { width: 44px; height: 44px; }
+  .mt-btn svg { width: 26px; height: 26px; }
+  .mt-playpause { width: 46px; height: 46px; }
+  .mt-playpause svg { width: 28px; height: 28px; }
 }
 
 /* ------------------------------------------------------------------ */
@@ -2219,3 +2237,203 @@ main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
   .modal-art::before { content: ""; display: block; padding-top: 100%; }
   .modal-art img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 }
+
+/* ------------------------------------------------------------------ */
+/*  Side menu (hamburger drawer) + Home landing                        */
+/* ------------------------------------------------------------------ */
+/* The original top-bar controls are moved into the side menu; they stay
+   in the DOM (hidden) as the action engine that menu items trigger. */
+.topbar-controls { display: none; }
+.menu-toggle { margin-right: 4px; }
+
+.menu-overlay { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 95; display: flex; }
+.menu-overlay.hidden { display: none; }
+.menu-backdrop {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  background: rgba(0,0,0,.5);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+.menu-drawer {
+  position: relative; z-index: 1;
+  width: min(82vw, 320px); height: 100%;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border);
+  box-shadow: 8px 0 40px rgba(0,0,0,.4);
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  overflow-y: auto;
+  animation: menuSlideIn .24s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes menuSlideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+.menu-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px; }
+.menu-brand { font-size: 17px; font-weight: 700; color: var(--text); }
+.menu-list { display: flex; flex-direction: column; padding: 4px 8px 16px; gap: 2px; }
+.menu-sep { height: 1px; background: var(--border); margin: 8px; }
+.menu-item {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; padding: 12px; border-radius: 10px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--text); font-size: 15px; font-family: inherit; text-align: left;
+  transition: background .12s ease, transform .06s ease;
+}
+.menu-item:hover { background: var(--bg-elev-2); }
+.menu-item:active { transform: scale(.99); }
+.menu-item.hidden { display: none; }
+.menu-item svg { width: 22px; height: 22px; flex-shrink: 0; color: var(--text-dim); }
+.menu-item span { flex: 1; }
+
+.home-view.hidden { display: none; }
+.home-search { margin: 2px 0 18px; }
+.home-section { margin: 0 0 22px; }
+.home-section-title { font-size: 16px; font-weight: 700; color: var(--text); margin: 0 0 12px; }
+/* Clickable section headers (Random albums, Label of the week) — the title
+   doubles as a link into the full view. A trailing chevron hints it's tappable. */
+.home-section-link { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.home-section-link::after { content: "›"; font-size: 20px; line-height: 1; color: var(--text-faint); transition: transform .15s ease; }
+.home-section-link:hover { color: var(--accent, var(--text)); }
+.home-section-link:hover::after { transform: translateX(3px); }
+.home-section-link:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 3px; border-radius: 4px; }
+
+/* Each Home section sits in its own softly-tinted panel so the rows read as
+   distinct blocks: grey (unplayed), teal (random), violet (label of the week),
+   amber (genres) — muted in dark mode, pastel in light mode. */
+.home-section-unplayed,
+.home-section-random,
+.home-section-lotw,
+.home-section-genres {
+  border-radius: 16px;
+  padding: 14px 14px 12px;
+}
+.home-section-unplayed { background: var(--home-unplayed-bg); }
+.home-section-random   { background: var(--home-random-bg); }
+.home-section-lotw     { background: var(--home-lotw-bg); }
+.home-section-genres   { background: var(--home-genres-bg); }
+
+/* Faint themed watermark for a section's panel — a large, rotated, SOLID-fill
+   line-art motif CROPPED by the panel's top-left corner (overflow:hidden) so it
+   reads as a bold cut-off detail contained entirely WITHIN the coloured section
+   (never spilling onto the page). Each section carries a motif matching its theme:
+   "Not played in 6 months" -> a clock (time gone by); "Random albums" -> a vinyl
+   record; "Label of the week" -> a price/luggage tag; "Browse by genre" -> a
+   beamed music note. Solid silhouettes (not thin outlines) so they stand out.
+   The art sits behind the title + carousel (z-index:0 vs 1), never intercepts
+   taps (pointer-events:none), and — thanks to overflow:hidden — can never
+   produce a scrollbar. Shared placement lives in the grouped rules; only the
+   mask-image differs per section, and background-color differs per theme —
+   each motif ships ONE opaque-white SVG used as a mask (not a background
+   image), so the theme swap is a color change rather than a second SVG. */
+.home-section-unplayed,
+.home-section-random,
+.home-section-lotw,
+.home-section-genres { position: relative; overflow: hidden; }
+.home-section-unplayed > *,
+.home-section-random > *,
+.home-section-lotw > *,
+.home-section-genres > * { position: relative; z-index: 1; }
+.home-section-unplayed::before,
+.home-section-random::before,
+.home-section-lotw::before,
+.home-section-genres::before {
+  content: "";
+  position: absolute;
+  top: -92px;
+  left: -84px;
+  width: 400px;
+  height: 400px;
+  transform: rotate(-14deg);
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain;    mask-size: contain;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  background-color: #ffffff;
+  opacity: .11;
+  pointer-events: none;
+  z-index: 0;
+}
+[data-theme="light"] .home-section-unplayed::before,
+[data-theme="light"] .home-section-random::before,
+[data-theme="light"] .home-section-lotw::before,
+[data-theme="light"] .home-section-genres::before {
+  opacity: .14;
+  background-color: #1a2740;
+}
+/* "Not played in 6 months" — clock. */
+.home-section-unplayed::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2040%20a60%2060%200%201%200%200%20120%20a60%2060%200%201%200%200%20-120%20Z'%2F%3E%3Cpath%20d%3D'M100%2045.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M151%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M100%20147.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M49%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'6'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'62'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'120'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2040%20a60%2060%200%201%200%200%20120%20a60%2060%200%201%200%200%20-120%20Z'%2F%3E%3Cpath%20d%3D'M100%2045.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M151%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M100%20147.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M49%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'6'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'62'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'120'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E");
+}
+/* "Random albums" — vinyl record. */
+.home-section-random::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2075%20a25%2025%200%201%200%200%2050%20a25%2025%200%201%200%200%20-50%20Z'%2F%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2081%20a19%2019%200%201%200%200%2038%20a19%2019%200%201%200%200%20-38%20Z%20M100%2095.5%20a4.5%204.5%200%201%200%200%209%20a4.5%204.5%200%201%200%200%20-9%20Z'%2F%3E%3C%2Fsvg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2075%20a25%2025%200%201%200%200%2050%20a25%2025%200%201%200%200%20-50%20Z'%2F%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2081%20a19%2019%200%201%200%200%2038%20a19%2019%200%201%200%200%20-38%20Z%20M100%2095.5%20a4.5%204.5%200%201%200%200%209%20a4.5%204.5%200%201%200%200%20-9%20Z'%2F%3E%3C%2Fsvg%3E");
+}
+/* "Label of the week" — price/luggage tag. */
+.home-section-lotw::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M104.88%2021.55A16.67%2016.67%200%200%200%2093.1%2016.67H33.33A16.67%2016.67%200%200%200%2016.67%2033.33V93.1a16.67%2016.67%200%200%200%204.88%2011.78l72.53%2072.53a20.22%2020.22%200%200%200%2028.5%200l54.83-54.83a20.22%2020.22%200%200%200%200-28.5Z%20M62.5%2051.5%20a11%2011%200%201%200%200%2022%20a11%2011%200%201%200%200%20-22%20Z'%2F%3E%3C%2Fsvg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M104.88%2021.55A16.67%2016.67%200%200%200%2093.1%2016.67H33.33A16.67%2016.67%200%200%200%2016.67%2033.33V93.1a16.67%2016.67%200%200%200%204.88%2011.78l72.53%2072.53a20.22%2020.22%200%200%200%2028.5%200l54.83-54.83a20.22%2020.22%200%200%200%200-28.5Z%20M62.5%2051.5%20a11%2011%200%201%200%200%2022%20a11%2011%200%201%200%200%20-22%20Z'%2F%3E%3C%2Fsvg%3E");
+}
+/* "Browse by genre" — beamed eighth notes. */
+.home-section-genres::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cellipse%20cx%3D'65'%20cy%3D'150'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Cellipse%20cx%3D'130'%20cy%3D'138'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Crect%20x%3D'79'%20y%3D'40'%20width%3D'8'%20height%3D'112'%2F%3E%3Crect%20x%3D'144'%20y%3D'25'%20width%3D'8'%20height%3D'115'%2F%3E%3Cpolygon%20points%3D'79%2040%20152%2025%20152%2038%2079%2053'%2F%3E%3Cpolygon%20points%3D'79%2058%20152%2043%20152%2056%2079%2071'%2F%3E%3C%2Fsvg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cellipse%20cx%3D'65'%20cy%3D'150'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Cellipse%20cx%3D'130'%20cy%3D'138'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Crect%20x%3D'79'%20y%3D'40'%20width%3D'8'%20height%3D'112'%2F%3E%3Crect%20x%3D'144'%20y%3D'25'%20width%3D'8'%20height%3D'115'%2F%3E%3Cpolygon%20points%3D'79%2040%20152%2025%20152%2038%2079%2053'%2F%3E%3Cpolygon%20points%3D'79%2058%20152%2043%20152%2056%2079%2071'%2F%3E%3C%2Fsvg%3E");
+}
+.home-carousel {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: 1fr;          /* phone / portrait: single row */
+  grid-auto-columns: 150px;
+  gap: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  padding-bottom: 4px;
+  /* Centre the tiles when they don't fill the panel; "safe" falls back to
+     left-alignment when the row overflows so the first tile is never clipped
+     and horizontal scrolling still works. */
+  justify-content: safe center;
+}
+.home-carousel::-webkit-scrollbar { display: none; }
+.home-carousel .album { width: auto; flex-shrink: 0; }
+/* Unplayed + Random: single row on phones, 2 rows on landscape tablets AND
+   desktops — 2 rows fills the width of wide screens better than 3 short rows. */
+@media (min-width: 768px) and (orientation: landscape) {
+  .home-carousel { grid-template-rows: repeat(2, auto); }
+}
+/* Label of the week is ALWAYS a single-row carousel on every screen (phone,
+   landscape tablet, desktop). This two-class selector (specificity 0,2,0) beats
+   the single-class multi-row rule in the breakpoint above (0,1,0) regardless of
+   source order — media queries add no specificity — so it never wraps. */
+.home-carousel.home-carousel-1row { grid-template-rows: 1fr; }
+.home-carousel-empty { color: var(--text-faint); font-size: 13px; padding: 8px 2px; }
+/* 12 genre buttons divide evenly into 2 / 3 / 4 / 6 columns, so every screen
+   width shows full rows with no lone trailing card. */
+.home-genre-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 560px)  { .home-genre-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 900px)  { .home-genre-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1200px) { .home-genre-grid { grid-template-columns: repeat(6, 1fr); } }
+.home-genre-card {
+  padding: 18px 14px; border-radius: 12px; min-height: 58px;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  color: var(--text); font-size: 15px; font-weight: 600; font-family: inherit;
+  cursor: pointer; text-align: left;
+  display: flex; align-items: center;
+  transition: border-color .12s ease, background .12s ease, transform .06s ease;
+}
+.home-genre-card:hover  { border-color: var(--accent); background: var(--bg-elev-2); }
+.home-genre-card:active { transform: scale(.98); }
+
+/* Search box relocated into the top bar (Home only). */
+#topbar-search { flex: 1 1 auto; min-width: 0; }
+#topbar-search.hidden { display: none; }
+#topbar-search .search-row { margin: 0; }
+#topbar-search .search-row.open { animation: none; }   /* no reveal jump in the bar */
+
+/* Album-of-the-day badge on the first "Not played" tile. */
+.home-aotd .album-art-wrap { position: relative; }
+.aotd-badge {
+  position: absolute; top: 6px; left: 6px; z-index: 2;
+  background: var(--accent); color: #04121a;
+  font-size: 10px; font-weight: 800; letter-spacing: .02em;
+  padding: 2px 7px; border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.4);
+}
+[data-theme="light"] .aotd-badge { color: #ffffff; }
