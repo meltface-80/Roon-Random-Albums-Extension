@@ -14,13 +14,13 @@ A web UI that shows a screenful of random albums from your Roon library, with in
 
 ## Features
 
-- **Random album grid** — fills your screen with random picks from your full library, refreshed on demand
-- **Instant search** — whole-library search with results split into Artists, Labels, and Albums sections; tap an artist or label chip to navigate directly
+- **Home** — lands on curated rows instead of a single grid: albums you haven't played in 6 months (with a daily Album of the Day pick), a fresh random shuffle, the Label of the Week, and a Browse by Genre grid; tap any row's header to open its full-screen view, or jump to the classic random album wall any time from the menu
+- **Instant search** — always available from the Home top bar; whole-library search with results split into Artists, Labels, and Albums sections; tap an artist or label chip to navigate directly
 - **Album detail** — full track listing, play/queue actions, release year, label link, editorial review, and artist bio; multiple artists are shown as individual tappable links
 - **Now Playing** — live panel showing the current track with album art and transport controls
 - **Play unheard** — one tap to find and play an album not in your listening history; falls back to anything not played in the last 30 days once your whole library has been heard
 - **Random Album Radio** — automatically queues a new random album when your queue runs dry, preferring albums not recently played
-- **Record labels** — browse your library by label, with logos from FanArt.tv and Discogs where available; includes Self-Released and Independent
+- **Record labels** — browse your library by label, with logos from FanArt.tv and Discogs where available; includes Self-Released and Independent, plus a featured Label of the Week on Home
 - **Label merge** — consolidate duplicate or variant label tiles into one; undo individual merges at any time
 - **Multi-select** — long-press to select multiple album tiles and play or queue them all at once
 - **Filters** — narrow the random pool by genre, decade, tag, or label
