@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.110] — 2026-07-04
+
+### Fixed
+- **Tapping an artist in Search now shows that artist's albums again** (their own albums plus "Also appears on"), instead of falling back to the Home sections. Regression from the Home-landing redesign: the search artist-chip clears and hides the results grid before opening the artist view, but the artist view rendered its albums into that still-hidden grid while the Home rows showed through. The artist view now reveals the grid and hides the Home view, and its "← Back" button restores exactly the screen you came from (the Home landing, or the album wall you were browsing).
+
 ## [1.5.109] — 2026-07-03
 
 ### Fixed

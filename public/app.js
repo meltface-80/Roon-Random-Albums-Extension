@@ -4483,28 +4483,50 @@ initServiceBrowser({
 /*  Artist albums view                                                 */
 /* ------------------------------------------------------------------ */
 (() => {
-  const grid       = document.getElementById("album-grid");
-  const countBar   = document.getElementById("content-count");
+  const grid         = document.getElementById("album-grid");
+  const countBar     = document.getElementById("content-count");
+  const homeView     = document.getElementById("home-view");
+  const homeSections = document.getElementById("home-sections");
 
   let artistViewActive = false;
-  let savedGridHtml    = "";
-  let savedCountHtml   = "";
+  let saved            = null;   // snapshot of the screen we came from
 
   function exitArtistView() {
     if (!artistViewActive) return;
     artistViewActive = false;
-    grid.innerHTML    = savedGridHtml;
-    if (countBar) { countBar.innerHTML = savedCountHtml; countBar.classList.add("hidden"); }
-    // Re-trigger a fresh random load
-    if (window.__loadRandom) window.__loadRandom();
+    // Restore exactly the screen the artist view was opened from (the Home
+    // landing, or an album wall) so Back doesn't dump the user somewhere else.
+    if (saved) {
+      grid.innerHTML = saved.gridHtml;
+      grid.classList.toggle("hidden", saved.gridHidden);
+      if (homeView)     homeView.classList.toggle("hidden", saved.homeViewHidden);
+      if (homeSections) homeSections.classList.toggle("hidden", saved.homeSectionsHidden);
+      if (countBar) { countBar.innerHTML = saved.countHtml; countBar.classList.toggle("hidden", saved.countHidden); }
+    }
+    saved = null;
   }
 
   async function showArtistAlbums(artistName) {
     if (!artistName) return;
     if (artistViewActive) exitArtistView();
+    // Snapshot the screen we're leaving (Home landing or an album wall) so the
+    // "← Back" button restores it exactly.
+    saved = {
+      gridHtml:           grid.innerHTML,
+      gridHidden:         grid.classList.contains("hidden"),
+      homeViewHidden:     homeView     ? homeView.classList.contains("hidden")     : true,
+      homeSectionsHidden: homeSections ? homeSections.classList.contains("hidden") : true,
+      countHtml:          countBar ? countBar.innerHTML : "",
+      countHidden:        countBar ? countBar.classList.contains("hidden") : true,
+    };
     artistViewActive = true;
-    savedGridHtml    = grid.innerHTML;
-    savedCountHtml   = countBar ? countBar.innerHTML : "";
+    // Reveal the shared album grid and leave the Home landing / search results.
+    // The search artist-chip calls stopSearch() first, which hides the grid and
+    // re-shows the Home sections; without this the artist albums would render
+    // into a hidden grid behind the Home rows (the reported bug).
+    if (homeView)     homeView.classList.add("hidden");
+    if (homeSections) homeSections.classList.add("hidden");
+    grid.classList.remove("hidden");
 
     // Show loading state
     if (countBar) {
