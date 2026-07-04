@@ -2317,34 +2317,30 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 .home-section-genres   { background: var(--home-genres-bg); }
 
 /* Faint themed watermark for a section's panel. "Not played in 6 months" gets a
-   ticking clock (time gone by) at the START of the bar, enlarged and rotated so
-   it bleeds OUT past the panel's top-left corner onto the page for a bit of
-   artistic flourish. It sits behind the title + carousel (z-index:0 vs 1) and
-   never intercepts taps (pointer-events:none). No overflow:hidden on the panel
-   so the art can spill out; the spill is up-and-left only (negative offsets),
-   which the always-clipping html/body + main scroll container absorb without
-   ever producing a horizontal scrollbar. In the normal populated state the
-   panel is tall enough to contain the art vertically; only in the transient
-   loading/empty state is the panel short enough that the art's lower edge
-   drifts a little below it — harmless at .07/.11 opacity and non-interactive. */
-.home-section-unplayed { position: relative; }
+   ticking clock (time gone by) at the START of the bar — large, rotated, and
+   CROPPED by the panel's top-left corner (overflow:hidden) so it's a bold cut-off
+   detail contained entirely WITHIN the coloured section, never spilling onto the
+   page. It sits behind the title + carousel (z-index:0 vs 1) and never intercepts
+   taps (pointer-events:none). overflow:hidden also means no scrollbar can ever
+   result from the art's negative offsets. */
+.home-section-unplayed { position: relative; overflow: hidden; }
 .home-section-unplayed > * { position: relative; z-index: 1; }
 .home-section-unplayed::before {
   content: "";
   position: absolute;
-  top: -62px;
-  left: -58px;
-  width: 270px;
-  height: 270px;
+  top: -92px;
+  left: -84px;
+  width: 400px;
+  height: 400px;
   transform: rotate(-14deg);
-  background: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'none'%20stroke%3D'%23ffffff'%20stroke-width%3D'3'%20stroke-linecap%3D'round'%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'72'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'4'%20fill%3D'%23ffffff'%20stroke%3D'none'%2F%3E%3Cg%20stroke-width%3D'3'%3E%3Cline%20x1%3D'100'%20y1%3D'28'%20x2%3D'100'%20y2%3D'40'%2F%3E%3Cline%20x1%3D'172'%20y1%3D'100'%20x2%3D'160'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'172'%20x2%3D'100'%20y2%3D'160'%2F%3E%3Cline%20x1%3D'28'%20y1%3D'100'%20x2%3D'40'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'50'%20x2%3D'143'%20y2%3D'57'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'150'%20x2%3D'143'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'150'%20x2%3D'57'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'50'%20x2%3D'57'%20y2%3D'57'%2F%3E%3C%2Fg%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'58'%20stroke-width%3D'4'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'118'%20stroke-width%3D'4'%2F%3E%3Cpath%20d%3D'M100%2012%20A88%2088%200%200%201%20178%2058'%20stroke-width%3D'2.4'%20opacity%3D'.8'%2F%3E%3Cpath%20d%3D'M188%20100%20A88%2088%200%200%201%20150%20176'%20stroke-width%3D'2.4'%20opacity%3D'.55'%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
-  opacity: .07;
+  background: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'none'%20stroke%3D'%23ffffff'%20stroke-width%3D'3.6'%20stroke-linecap%3D'round'%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'72'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'4.5'%20fill%3D'%23ffffff'%20stroke%3D'none'%2F%3E%3Cg%20stroke-width%3D'3.6'%3E%3Cline%20x1%3D'100'%20y1%3D'26'%20x2%3D'100'%20y2%3D'40'%2F%3E%3Cline%20x1%3D'174'%20y1%3D'100'%20x2%3D'160'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'174'%20x2%3D'100'%20y2%3D'160'%2F%3E%3Cline%20x1%3D'26'%20y1%3D'100'%20x2%3D'40'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'50'%20x2%3D'143'%20y2%3D'57'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'150'%20x2%3D'143'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'150'%20x2%3D'57'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'50'%20x2%3D'57'%20y2%3D'57'%2F%3E%3C%2Fg%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'56'%20stroke-width%3D'4.8'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'136'%20y2%3D'120'%20stroke-width%3D'4.8'%2F%3E%3Cpath%20d%3D'M100%2010%20A90%2090%200%200%201%20180%2056'%20stroke-width%3D'2.9'%20opacity%3D'.8'%2F%3E%3Cpath%20d%3D'M190%20100%20A90%2090%200%200%201%20150%20178'%20stroke-width%3D'2.9'%20opacity%3D'.55'%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+  opacity: .08;
   pointer-events: none;
   z-index: 0;
 }
 [data-theme="light"] .home-section-unplayed::before {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'none'%20stroke%3D'%231a2740'%20stroke-width%3D'3'%20stroke-linecap%3D'round'%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'72'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'4'%20fill%3D'%231a2740'%20stroke%3D'none'%2F%3E%3Cg%20stroke-width%3D'3'%3E%3Cline%20x1%3D'100'%20y1%3D'28'%20x2%3D'100'%20y2%3D'40'%2F%3E%3Cline%20x1%3D'172'%20y1%3D'100'%20x2%3D'160'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'172'%20x2%3D'100'%20y2%3D'160'%2F%3E%3Cline%20x1%3D'28'%20y1%3D'100'%20x2%3D'40'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'50'%20x2%3D'143'%20y2%3D'57'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'150'%20x2%3D'143'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'150'%20x2%3D'57'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'50'%20x2%3D'57'%20y2%3D'57'%2F%3E%3C%2Fg%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'58'%20stroke-width%3D'4'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'118'%20stroke-width%3D'4'%2F%3E%3Cpath%20d%3D'M100%2012%20A88%2088%200%200%201%20178%2058'%20stroke-width%3D'2.4'%20opacity%3D'.8'%2F%3E%3Cpath%20d%3D'M188%20100%20A88%2088%200%200%201%20150%20176'%20stroke-width%3D'2.4'%20opacity%3D'.55'%2F%3E%3C%2Fsvg%3E");
-  opacity: .11;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'none'%20stroke%3D'%231a2740'%20stroke-width%3D'3.6'%20stroke-linecap%3D'round'%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'72'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'4.5'%20fill%3D'%231a2740'%20stroke%3D'none'%2F%3E%3Cg%20stroke-width%3D'3.6'%3E%3Cline%20x1%3D'100'%20y1%3D'26'%20x2%3D'100'%20y2%3D'40'%2F%3E%3Cline%20x1%3D'174'%20y1%3D'100'%20x2%3D'160'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'174'%20x2%3D'100'%20y2%3D'160'%2F%3E%3Cline%20x1%3D'26'%20y1%3D'100'%20x2%3D'40'%20y2%3D'100'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'50'%20x2%3D'143'%20y2%3D'57'%2F%3E%3Cline%20x1%3D'150'%20y1%3D'150'%20x2%3D'143'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'150'%20x2%3D'57'%20y2%3D'143'%2F%3E%3Cline%20x1%3D'50'%20y1%3D'50'%20x2%3D'57'%20y2%3D'57'%2F%3E%3C%2Fg%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'56'%20stroke-width%3D'4.8'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'136'%20y2%3D'120'%20stroke-width%3D'4.8'%2F%3E%3Cpath%20d%3D'M100%2010%20A90%2090%200%200%201%20180%2056'%20stroke-width%3D'2.9'%20opacity%3D'.8'%2F%3E%3Cpath%20d%3D'M190%20100%20A90%2090%200%200%201%20150%20178'%20stroke-width%3D'2.9'%20opacity%3D'.55'%2F%3E%3C%2Fsvg%3E");
+  opacity: .12;
 }
 .home-carousel {
   display: grid;
