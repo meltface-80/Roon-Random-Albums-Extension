@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.116] — 2026-07-04
+
+### Added
+- **"Browse by genre" panel now has a music-note watermark** — solid-filled beamed eighth notes, matching the clock, vinyl and tag watermarks in size, rotation, opacity and top-left cut-off crop. All four Home sections now carry a themed watermark.
+
 ## [1.5.115] — 2026-07-04
 
 ### Added
