@@ -2,6 +2,26 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.117] — 2026-07-04
+
+### Fixed (found by an 8-angle multi-agent review of the v1.5.101–116 Home redesign)
+- **A genre/tag filter no longer gets silently wiped on reload.** `bootstrap()` always landed on unfiltered Home after pairing, and `showHome()` unconditionally cleared any filter restored from `localStorage` — so reopening the app after filtering to a genre always dropped back to unfiltered Home and deleted the saved filter. A restored filter now re-opens the filtered wall instead.
+- **"Browse by genre" could get stuck empty for the rest of the session** after a single transient load failure — the "loaded once" flag was set before the fetch resolved, unlike the sibling "Label of the week" row, which already retried correctly. It now only marks itself loaded once genres actually render, so a cold-cache or network blip on the first Home visit no longer permanently disables the section.
+- **Roon Core disconnecting mid-session showed misleading empty states on Home** ("Nothing here yet", "No albums.", "Couldn't load genres.") instead of a "Waiting for Roon Core" message — four of the five Home data loaders never checked for the 503 "not paired" response the way the older wall loader always has. All four now show the same Roon-disconnected message.
+- **Opening a second artist view after an improper exit could restore corrupted content.** `artistViewActive` and its DOM snapshot were never cleared by `showHome()`/`showWall()` (unlike the equivalent `labelsActive` flag), so leaving an artist view via the shared Back button left it stuck active; a second artist view opened afterward would restore the first view's stale snapshot on exit instead of Home. `showHome()`/`showWall()` now exit the artist view the same way they already exit the Labels browser.
+- **The artist view never synced the shared top bar**, so depending on where you opened it from, either a second empty back affordance or none at all sat next to its own "← Back" button. It now hides the shared Back/Refresh/Search on entry and restores whatever the previous screen had on exit.
+- **A resize (iOS Safari's URL bar collapsing, iPad split-view) could silently replace an active search or the "Not played" full grid with the random wall** — the resize handler only excluded the Labels browser. It now also skips Home, an active search, and the unplayed-wall view.
+- **A search query left visible when the user detoured through Labels** — leaving Home for the Labels browser and returning didn't clear the search box, so a stale query reappeared even though its results had already been discarded. `showHome()`, `showLabelsList()`, and `showLabelAlbums()` now clear search state the same way the wall view already does.
+- **Search result-count/progress text ("3 albums, 1 label", "Building index… NN%") was permanently invisible** on Home's relocated search box — a leftover `search-status-hidden` class unconditionally hid it regardless of content.
+- **The "Random albums" row re-fetched ~30 albums with fully sequential Roon round-trips on every single Home visit** (menu → Home, or the Back button), not just once on first load as before the Home redesign — a visible delay on every revisit. The album loads are now batched (8 at a time) instead of one-by-one.
+- Tapping an artist name on an album opened from inside the Labels browser could leave the Labels-browser flag stuck active while viewing the artist; it's now cleared the same way the equivalent search result chip already does.
+
+### Changed (reuse / simplification, same review)
+- Deduplicated a hand-rolled cache, a SQL "played since" query, an FNV-1a hash loop, and an album-count regex that each existed in two places — now shared helpers (`makeTtlCache`, `getPlayedTitlesSince`, `fnv1aHash`, `parseAlbumCount`).
+- Removed dead code left over from the Home redesign: an unused `sessionStorage` cache, the fully-unused `openSearch`/`closeSearch` functions and their inert `#search-toggle` button, a no-op `loadAlbumCount()`, and an unnecessary `typeof` guard.
+- The four Home watermarks (clock/vinyl/tag/note) now each ship one SVG used as a CSS mask (with a `-webkit-mask-image` fallback) instead of two near-identical SVGs per motif for light/dark — the theme swap is now a color change, not a second image.
+- Two silent `catch (e) {}` blocks now carry the explanatory comment this project's conventions require.
+
 ## [1.5.116] — 2026-07-04
 
 ### Added

@@ -212,12 +212,6 @@ button { font-family: inherit; }
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: none; }
 }
-/* Magnifier toggle takes on the accent when the bar is open */
-#search-toggle.is-active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
 .search-box {
   flex: 1 1 auto; min-width: 0;
   display: flex; align-items: center; gap: 8px;
@@ -2326,7 +2320,9 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
    The art sits behind the title + carousel (z-index:0 vs 1), never intercepts
    taps (pointer-events:none), and — thanks to overflow:hidden — can never
    produce a scrollbar. Shared placement lives in the grouped rules; only the
-   background-image differs per section/theme. */
+   mask-image differs per section, and background-color differs per theme —
+   each motif ships ONE opaque-white SVG used as a mask (not a background
+   image), so the theme swap is a color change rather than a second SVG. */
 .home-section-unplayed,
 .home-section-random,
 .home-section-lotw,
@@ -2346,9 +2342,10 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   width: 400px;
   height: 400px;
   transform: rotate(-14deg);
-  background-position: center;
-  background-size: contain;
-  background-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain;    mask-size: contain;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  background-color: #ffffff;
   opacity: .11;
   pointer-events: none;
   z-index: 0;
@@ -2356,19 +2353,30 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 [data-theme="light"] .home-section-unplayed::before,
 [data-theme="light"] .home-section-random::before,
 [data-theme="light"] .home-section-lotw::before,
-[data-theme="light"] .home-section-genres::before { opacity: .14; }
+[data-theme="light"] .home-section-genres::before {
+  opacity: .14;
+  background-color: #1a2740;
+}
 /* "Not played in 6 months" — clock. */
-.home-section-unplayed::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2040%20a60%2060%200%201%200%200%20120%20a60%2060%200%201%200%200%20-120%20Z'%2F%3E%3Cpath%20d%3D'M100%2045.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M151%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M100%20147.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M49%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'6'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'62'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'120'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E"); }
-[data-theme="light"] .home-section-unplayed::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%231a2740'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2040%20a60%2060%200%201%200%200%20120%20a60%2060%200%201%200%200%20-120%20Z'%2F%3E%3Cpath%20d%3D'M100%2045.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M151%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M100%20147.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M49%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'6'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'62'%20stroke%3D'%231a2740'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'120'%20stroke%3D'%231a2740'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E"); }
+.home-section-unplayed::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2040%20a60%2060%200%201%200%200%20120%20a60%2060%200%201%200%200%20-120%20Z'%2F%3E%3Cpath%20d%3D'M100%2045.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M151%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M100%20147.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M49%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'6'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'62'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'120'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2040%20a60%2060%200%201%200%200%20120%20a60%2060%200%201%200%200%20-120%20Z'%2F%3E%3Cpath%20d%3D'M100%2045.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M151%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M100%20147.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M49%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'6'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'62'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'120'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E");
+}
 /* "Random albums" — vinyl record. */
-.home-section-random::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2075%20a25%2025%200%201%200%200%2050%20a25%2025%200%201%200%200%20-50%20Z'%2F%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2081%20a19%2019%200%201%200%200%2038%20a19%2019%200%201%200%200%20-38%20Z%20M100%2095.5%20a4.5%204.5%200%201%200%200%209%20a4.5%204.5%200%201%200%200%20-9%20Z'%2F%3E%3C%2Fsvg%3E"); }
-[data-theme="light"] .home-section-random::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%231a2740'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2075%20a25%2025%200%201%200%200%2050%20a25%2025%200%201%200%200%20-50%20Z'%2F%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2081%20a19%2019%200%201%200%200%2038%20a19%2019%200%201%200%200%20-38%20Z%20M100%2095.5%20a4.5%204.5%200%201%200%200%209%20a4.5%204.5%200%201%200%200%20-9%20Z'%2F%3E%3C%2Fsvg%3E"); }
+.home-section-random::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2075%20a25%2025%200%201%200%200%2050%20a25%2025%200%201%200%200%20-50%20Z'%2F%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2081%20a19%2019%200%201%200%200%2038%20a19%2019%200%201%200%200%20-38%20Z%20M100%2095.5%20a4.5%204.5%200%201%200%200%209%20a4.5%204.5%200%201%200%200%20-9%20Z'%2F%3E%3C%2Fsvg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2075%20a25%2025%200%201%200%200%2050%20a25%2025%200%201%200%200%20-50%20Z'%2F%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2081%20a19%2019%200%201%200%200%2038%20a19%2019%200%201%200%200%20-38%20Z%20M100%2095.5%20a4.5%204.5%200%201%200%200%209%20a4.5%204.5%200%201%200%200%20-9%20Z'%2F%3E%3C%2Fsvg%3E");
+}
 /* "Label of the week" — price/luggage tag. */
-.home-section-lotw::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M104.88%2021.55A16.67%2016.67%200%200%200%2093.1%2016.67H33.33A16.67%2016.67%200%200%200%2016.67%2033.33V93.1a16.67%2016.67%200%200%200%204.88%2011.78l72.53%2072.53a20.22%2020.22%200%200%200%2028.5%200l54.83-54.83a20.22%2020.22%200%200%200%200-28.5Z%20M62.5%2051.5%20a11%2011%200%201%200%200%2022%20a11%2011%200%201%200%200%20-22%20Z'%2F%3E%3C%2Fsvg%3E"); }
-[data-theme="light"] .home-section-lotw::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%231a2740'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M104.88%2021.55A16.67%2016.67%200%200%200%2093.1%2016.67H33.33A16.67%2016.67%200%200%200%2016.67%2033.33V93.1a16.67%2016.67%200%200%200%204.88%2011.78l72.53%2072.53a20.22%2020.22%200%200%200%2028.5%200l54.83-54.83a20.22%2020.22%200%200%200%200-28.5Z%20M62.5%2051.5%20a11%2011%200%201%200%200%2022%20a11%2011%200%201%200%200%20-22%20Z'%2F%3E%3C%2Fsvg%3E"); }
+.home-section-lotw::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M104.88%2021.55A16.67%2016.67%200%200%200%2093.1%2016.67H33.33A16.67%2016.67%200%200%200%2016.67%2033.33V93.1a16.67%2016.67%200%200%200%204.88%2011.78l72.53%2072.53a20.22%2020.22%200%200%200%2028.5%200l54.83-54.83a20.22%2020.22%200%200%200%200-28.5Z%20M62.5%2051.5%20a11%2011%200%201%200%200%2022%20a11%2011%200%201%200%200%20-22%20Z'%2F%3E%3C%2Fsvg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M104.88%2021.55A16.67%2016.67%200%200%200%2093.1%2016.67H33.33A16.67%2016.67%200%200%200%2016.67%2033.33V93.1a16.67%2016.67%200%200%200%204.88%2011.78l72.53%2072.53a20.22%2020.22%200%200%200%2028.5%200l54.83-54.83a20.22%2020.22%200%200%200%200-28.5Z%20M62.5%2051.5%20a11%2011%200%201%200%200%2022%20a11%2011%200%201%200%200%20-22%20Z'%2F%3E%3C%2Fsvg%3E");
+}
 /* "Browse by genre" — beamed eighth notes. */
-.home-section-genres::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cellipse%20cx%3D'65'%20cy%3D'150'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Cellipse%20cx%3D'130'%20cy%3D'138'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Crect%20x%3D'79'%20y%3D'40'%20width%3D'8'%20height%3D'112'%2F%3E%3Crect%20x%3D'144'%20y%3D'25'%20width%3D'8'%20height%3D'115'%2F%3E%3Cpolygon%20points%3D'79%2040%20152%2025%20152%2038%2079%2053'%2F%3E%3Cpolygon%20points%3D'79%2058%20152%2043%20152%2056%2079%2071'%2F%3E%3C%2Fsvg%3E"); }
-[data-theme="light"] .home-section-genres::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%231a2740'%3E%3Cellipse%20cx%3D'65'%20cy%3D'150'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Cellipse%20cx%3D'130'%20cy%3D'138'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Crect%20x%3D'79'%20y%3D'40'%20width%3D'8'%20height%3D'112'%2F%3E%3Crect%20x%3D'144'%20y%3D'25'%20width%3D'8'%20height%3D'115'%2F%3E%3Cpolygon%20points%3D'79%2040%20152%2025%20152%2038%2079%2053'%2F%3E%3Cpolygon%20points%3D'79%2058%20152%2043%20152%2056%2079%2071'%2F%3E%3C%2Fsvg%3E"); }
+.home-section-genres::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cellipse%20cx%3D'65'%20cy%3D'150'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Cellipse%20cx%3D'130'%20cy%3D'138'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Crect%20x%3D'79'%20y%3D'40'%20width%3D'8'%20height%3D'112'%2F%3E%3Crect%20x%3D'144'%20y%3D'25'%20width%3D'8'%20height%3D'115'%2F%3E%3Cpolygon%20points%3D'79%2040%20152%2025%20152%2038%2079%2053'%2F%3E%3Cpolygon%20points%3D'79%2058%20152%2043%20152%2056%2079%2071'%2F%3E%3C%2Fsvg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cellipse%20cx%3D'65'%20cy%3D'150'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Cellipse%20cx%3D'130'%20cy%3D'138'%20rx%3D'18'%20ry%3D'13'%2F%3E%3Crect%20x%3D'79'%20y%3D'40'%20width%3D'8'%20height%3D'112'%2F%3E%3Crect%20x%3D'144'%20y%3D'25'%20width%3D'8'%20height%3D'115'%2F%3E%3Cpolygon%20points%3D'79%2040%20152%2025%20152%2038%2079%2053'%2F%3E%3Cpolygon%20points%3D'79%2058%20152%2043%20152%2056%2079%2071'%2F%3E%3C%2Fsvg%3E");
+}
 .home-carousel {
   display: grid;
   grid-auto-flow: column;
@@ -2418,7 +2426,6 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 #topbar-search.hidden { display: none; }
 #topbar-search .search-row { margin: 0; }
 #topbar-search .search-row.open { animation: none; }   /* no reveal jump in the bar */
-.search-status-hidden { display: none; }
 
 /* Album-of-the-day badge on the first "Not played" tile. */
 .home-aotd .album-art-wrap { position: relative; }

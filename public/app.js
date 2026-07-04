@@ -58,6 +58,7 @@
   };
   let albumCount = computeAlbumCount();
   let labelsActive = false;        // viewing the record-label browser?
+  let unplayedWallActive = false;  // viewing the full "Not played in 6 months" grid?
   let albumSelectMode = false;
   let albumSelected = [];          // [{offset,title,subtitle}] albums chosen in select mode
   // The filter that the currently-open album modal belongs to. Usually the
@@ -81,11 +82,6 @@
            (f.parent ? "&filter_parent=" + encodeURIComponent(f.parent) : "");
   }
   function filterQS() { return filterQSOf(activeFilter); }
-  function filterCacheKey() {
-    return activeFilter
-      ? activeFilter.type + ":" + (activeFilter.parent ? activeFilter.parent + ">" : "") + activeFilter.value
-      : "all";
-  }
 
   // ----- Theme -----
   const savedTheme = localStorage.getItem("rra-theme");
@@ -183,14 +179,17 @@
   }
 
   // Re-fit the phone wall when the viewport resizes (Safari chrome collapsing,
-  // iPad split view). Debounced; ignores the labels browser (its grid is its
-  // own) and only reloads when the row count actually changes — otherwise it
-  // just rescales the art so nothing needs to scroll.
+  // iPad split view). Debounced; only applies to the actual phone-fit random
+  // wall — it must not fire while Home, an active search, the labels browser,
+  // or the "Not played" full grid are showing, since none of those are the
+  // phone-fit wall and loadRandom() would silently replace their content.
   let _wallResizeTimer = null;
   window.addEventListener("resize", () => {
     clearTimeout(_wallResizeTimer);
     _wallResizeTimer = setTimeout(() => {
-      if (labelsActive) return;
+      if (labelsActive || unplayedWallActive) return;
+      if (homeView && !homeView.classList.contains("hidden")) return;
+      if (window.__searchActive && window.__searchActive()) return;
       if (Math.min(window.innerWidth, window.innerHeight) >= 768) return;
       const next = computeAlbumCount();
       if (next !== albumCount) loadRandom();   // rows changed → refetch to fill exactly
@@ -221,12 +220,15 @@
 
   // Show the Home landing (hide the wall). The wall loads lazily when entered.
   function showHome() {
+    unplayedWallActive = false;
+    if (window.__clearSearchIfActive) window.__clearSearchIfActive();  // drop stale search results
     if (window.__exitLabels) window.__exitLabels();   // leave the labels browser if active
+    if (window.__exitArtistView) window.__exitArtistView();   // leave the artist view if active
     // Home is unfiltered — clear any active genre/tag filter so the breadcrumb
     // title goes away AND Home's full-library tiles resolve correctly.
     if (activeFilter) {
       activeFilter = null;
-      try { localStorage.removeItem("rra-filter"); } catch (e) {}
+      try { localStorage.removeItem("rra-filter"); } catch (e) {} // localStorage optional (private browsing)
     }
     updateCountReadout(null);   // hide the genre/label breadcrumb
     setBanner(null);            // drop any error/empty banner left by a wall view
@@ -244,14 +246,16 @@
     // Label of the week depends on the background labels scan, which may not be
     // ready on the first visit — retry each visit until it populates, then stop.
     if (!homeLotwLoaded) loadHomeLabelOfWeek();
-    if (!homeSectionsLoaded) { homeSectionsLoaded = true; loadHomeGenres(); }
+    if (!homeSectionsLoaded) loadHomeGenres();
   }
   // Reveal the album wall. opts.loadIfEmpty loads a fresh wall only when it has
   // no content yet (so passive reveals — opening an overlay from the menu —
   // don't leave an empty grid behind, without racing actions that render their
   // own content, e.g. labels/search).
   function showWall(opts) {
+    unplayedWallActive = false;
     if (window.__clearSearchIfActive) window.__clearSearchIfActive();  // drop stale search results
+    if (window.__exitArtistView) window.__exitArtistView();   // leave the artist view if active
     if (homeView) homeView.classList.add("hidden");
     grid.classList.remove("hidden");
     setTopbarNav(true, true, false);   // random / genre grid: Back + Refresh, no search
@@ -286,6 +290,10 @@
     } catch (e) { /* non-fatal — just no album-of-the-day */ }
     try {
       const r = await fetch("/api/home/unplayed?months=6&count=30");
+      if (r.status === 503) {
+        homeUnplayed.innerHTML = '<div class="home-carousel-empty">Waiting for Roon Core…</div>';
+        return;
+      }
       const j = await r.json();
       const albums = (j && j.albums) || [];
       homeUnplayed.innerHTML = "";
@@ -320,6 +328,10 @@
     homeRandom.innerHTML = '<div class="home-carousel-empty">Loading…</div>';
     try {
       const r = await fetch("/api/random-albums?count=30");
+      if (r.status === 503) {
+        homeRandom.innerHTML = '<div class="home-carousel-empty">Waiting for Roon Core…</div>';
+        return;
+      }
       const j = await r.json();
       const albums = (j && j.albums) || [];
       homeRandom.innerHTML = "";
@@ -373,12 +385,13 @@
   // header. Fills the main grid with a larger unplayed list (tiles open
   // unfiltered, like the Home row) and shows a Back button to Home.
   async function showUnplayedWall() {
+    unplayedWallActive = true;
     if (window.__exitLabels) window.__exitLabels();
     if (activeFilter) { activeFilter = null; try { localStorage.removeItem("rra-filter"); } catch (e) {} }
     if (homeView) homeView.classList.add("hidden");
     if (homeSections) homeSections.classList.remove("hidden");
     grid.classList.remove("hidden");
-    if (typeof clearWallGridSizing === "function") clearWallGridSizing();  // standard grid, not phone-fit wall
+    clearWallGridSizing();  // standard grid, not phone-fit wall
     setTopbarNav(true, false, false);   // Back (to Home), no Refresh, no search
     setCountText("Not played in 6 months");
     const m = document.querySelector("main");
@@ -386,6 +399,11 @@
     renderSkeletons(computeAlbumCount());
     try {
       const r = await fetch("/api/home/unplayed?months=6&count=96");
+      if (r.status === 503) {
+        const j = await r.json().catch(() => ({}));
+        setBanner(j.error || "Waiting for Roon Core. Enable this extension in Roon → Settings → Extensions.", true);
+        grid.innerHTML = ""; return;
+      }
       const j = await r.json();
       const albums = (j && j.albums) || [];
       grid.innerHTML = "";
@@ -447,10 +465,16 @@
     if (!homeGenres) return;
     homeGenres.innerHTML = '<div class="home-carousel-empty">Loading…</div>';
     try {
-      const [genresJ, groupsJ] = await Promise.all([
-        fetch("/api/filters/genres").then(r => r.json()).catch(() => ({})),
-        fetch("/api/home/genre-groups").then(r => r.json()).catch(() => ({}))
+      const [genresRes, groupsRes] = await Promise.all([
+        fetch("/api/filters/genres").catch(() => null),
+        fetch("/api/home/genre-groups").catch(() => null)
       ]);
+      if ((genresRes && genresRes.status === 503) || (groupsRes && groupsRes.status === 503)) {
+        homeGenres.innerHTML = '<div class="home-carousel-empty">Waiting for Roon Core…</div>';
+        return;
+      }
+      const genresJ = genresRes ? await genresRes.json().catch(() => ({})) : {};
+      const groupsJ = groupsRes ? await groupsRes.json().catch(() => ({})) : {};
       // Pull extra genres up front — splitting Pop/Rock adds a card, and we trim
       // down to an even count afterwards so the 2-column grid has full rows.
       const top = ((genresJ && genresJ.genres) || []).slice(0, 16); // biggest first
@@ -485,6 +509,7 @@
         homeGenres.innerHTML = '<div class="home-carousel-empty">No genres found.</div>';
         return;
       }
+      homeSectionsLoaded = true;   // populated — stop retrying on future visits
       const frag = document.createDocumentFragment();
       for (const c of cards) {
         const card = document.createElement("button");
@@ -672,9 +697,6 @@
   // the controls on phones. The library total now lives in Settings; the
   // topbar element is reused only for transient CONTEXT (the active filter
   // value and the labels-browser breadcrumb) and is hidden on the plain wall.
-  // Album counts were removed from every screen. loadAlbumCount is kept as a
-  // no-op so existing call sites don't need touching.
-  async function loadAlbumCount() { /* album counts removed — nothing to load */ }
   // Set the topbar context text directly (used by the labels browser).
   function setCountText(text) {
     const el = document.getElementById("album-count");
@@ -717,10 +739,6 @@
       }
       const j = await r.json();
       renderAlbums(j.albums || []);
-      try {
-        sessionStorage.setItem("rra-albums",
-          JSON.stringify({ filter: filterCacheKey(), list: j.albums || [] }));
-      } catch (e) {} // sessionStorage may be unavailable (private browsing quota) — cache is optional
       updateCountReadout(j.filtered ? j.total : null);
     } catch (e) {
       setBanner(`Couldn't load albums: ${e.message}`, true);
@@ -907,6 +925,7 @@
       btn.textContent = part;
       btn.addEventListener("click", () => {
         closeModal();
+        if (window.__exitLabels) window.__exitLabels();   // leave the labels browser if active
         window.__showArtistAlbums && window.__showArtistAlbums(part);
       });
       modalSub.appendChild(btn);
@@ -1355,7 +1374,6 @@
     const input    = document.getElementById("search-input");
     const clear    = document.getElementById("search-clear");
     const statusEl = document.getElementById("search-status");
-    const toggle   = document.getElementById("search-toggle");
     const row      = document.getElementById("search-row");
     if (!input || !row) return;
 
@@ -1382,26 +1400,6 @@
       grid.classList.add("hidden");
       const hs = document.getElementById("home-sections");
       if (hs) hs.classList.remove("hidden");
-    }
-
-    function openSearch() {
-      row.classList.add("open");
-      toggle.classList.add("is-active");
-      toggle.setAttribute("aria-expanded", "true");
-      // Focus synchronously inside the tap handler — iOS only raises the
-      // keyboard for a .focus() call made directly within the user gesture.
-      input.focus();
-    }
-
-    // Fully close the bar (and clear any query / results behind it).
-    function closeSearch() {
-      const hadQuery = !!input.value.trim();
-      input.value = "";
-      if (hadQuery) stopSearch();              // repaint wall only if we were searching
-      row.classList.remove("open");
-      toggle.classList.remove("is-active");
-      toggle.setAttribute("aria-expanded", "false");
-      input.blur();
     }
 
     async function run(q) {
@@ -1538,6 +1536,7 @@
     // Called when leaving Home for the wall/labels so stale search results
     // don't linger in the shared grid. No-op unless a search is active.
     window.__clearSearchIfActive = () => { if (active) { input.value = ""; stopSearch(); } };
+    window.__searchActive = () => active;
   })();
 
   // ----- Boot -----
@@ -1573,7 +1572,6 @@
         if (f) localStorage.setItem("rra-filter", JSON.stringify(f));
         else   localStorage.removeItem("rra-filter");
       } catch (e) {} // localStorage optional (private browsing)
-      try { sessionStorage.removeItem("rra-albums"); } catch (e) {} // sessionStorage optional
       if (window.__exitLabels) window.__exitLabels();
       markActive();
       close();
@@ -1937,7 +1935,10 @@
     }
 
     async function showLabelsList(isRepoll = false) {
-      if (!isRepoll) { exitAlbumSelectMode(); closeLabelLogoSheet(); currentLabelName = null; currentLabelLogoUrl = null; }
+      if (!isRepoll) {
+        if (window.__clearSearchIfActive) window.__clearSearchIfActive();  // drop stale search results
+        exitAlbumSelectMode(); closeLabelLogoSheet(); currentLabelName = null; currentLabelLogoUrl = null;
+      }
       const restoreScroll = !isRepoll && _labelsScrollSaved > 0;
       mode = "list";
       labelsActive = true;
@@ -2103,6 +2104,7 @@
     }
 
     async function showLabelAlbums(name, fromLabelsList = false) {
+      if (window.__clearSearchIfActive) window.__clearSearchIfActive();  // drop stale search results
       if (fromLabelsList) {
         // Came from a tap on the Labels grid — remember the grid scroll position.
         _labelsScrollSaved = mainEl ? mainEl.scrollTop : 0;
@@ -2249,8 +2251,12 @@
 
           // Home is the landing view; the album wall loads lazily when the
           // user enters it (menu → Random albums / a genre / filter / labels).
-          showHome();
-          loadAlbumCount();
+          // Exception: a genre/tag filter that survived a reload (restored from
+          // localStorage above) means the user was mid-browse a filtered wall —
+          // land back on it instead of silently discarding the filter, which is
+          // what showHome() would otherwise do on its way to an unfiltered Home.
+          if (activeFilter) showWall({ loadIfEmpty: true });
+          else showHome();
 
           // Restore the album modal if it was open
           try {
@@ -4487,6 +4493,9 @@ initServiceBrowser({
   const countBar     = document.getElementById("content-count");
   const homeView     = document.getElementById("home-view");
   const homeSections = document.getElementById("home-sections");
+  const topbarBack    = document.getElementById("topbar-back");
+  const topbarRefresh = document.getElementById("topbar-refresh");
+  const topbarSearch  = document.getElementById("topbar-search");
 
   let artistViewActive = false;
   let saved            = null;   // snapshot of the screen we came from
@@ -4502,6 +4511,9 @@ initServiceBrowser({
       if (homeView)     homeView.classList.toggle("hidden", saved.homeViewHidden);
       if (homeSections) homeSections.classList.toggle("hidden", saved.homeSectionsHidden);
       if (countBar) { countBar.innerHTML = saved.countHtml; countBar.classList.toggle("hidden", saved.countHidden); }
+      if (topbarBack)    topbarBack.classList.toggle("hidden", saved.topbarBackHidden);
+      if (topbarRefresh) topbarRefresh.classList.toggle("hidden", saved.topbarRefreshHidden);
+      if (topbarSearch)  topbarSearch.classList.toggle("hidden", saved.topbarSearchHidden);
     }
     saved = null;
   }
@@ -4518,6 +4530,9 @@ initServiceBrowser({
       homeSectionsHidden: homeSections ? homeSections.classList.contains("hidden") : true,
       countHtml:          countBar ? countBar.innerHTML : "",
       countHidden:        countBar ? countBar.classList.contains("hidden") : true,
+      topbarBackHidden:    topbarBack    ? topbarBack.classList.contains("hidden")    : true,
+      topbarRefreshHidden: topbarRefresh ? topbarRefresh.classList.contains("hidden") : true,
+      topbarSearchHidden:  topbarSearch  ? topbarSearch.classList.contains("hidden")  : true,
     };
     artistViewActive = true;
     // Reveal the shared album grid and leave the Home landing / search results.
@@ -4527,6 +4542,12 @@ initServiceBrowser({
     if (homeView)     homeView.classList.add("hidden");
     if (homeSections) homeSections.classList.add("hidden");
     grid.classList.remove("hidden");
+    // Hide the shared topbar nav — this view has its own "← Back" button in
+    // countBar, so leaving the shared Back/Refresh/Search visible (whatever the
+    // previous screen set them to) would show a second, redundant back control.
+    if (topbarBack)    topbarBack.classList.add("hidden");
+    if (topbarRefresh) topbarRefresh.classList.add("hidden");
+    if (topbarSearch)  topbarSearch.classList.add("hidden");
 
     // Show loading state
     if (countBar) {

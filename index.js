@@ -461,13 +461,23 @@ async function pickRandomAlbums(count, filter) {
   while (picked.size < want) picked.add(Math.floor(Math.random() * total));
   const offsets = [...picked];
 
+  // Loaded in small concurrent batches (not fully sequential, not unbounded) —
+  // this endpoint is re-fetched on every Home visit, so a fully sequential loop
+  // here meant ~30 serialized Roon round-trips on every single visit.
+  const RANDOM_LOAD_BATCH = 8;
   const albums = [];
-  for (const off of offsets) {
-    try {
-      const r = await load({
-        hierarchy: nav.hierarchy, offset: off, count: 1, multi_session_key: sessionKey
-      });
-      const item = r.items && r.items[0];
+  for (let i = 0; i < offsets.length; i += RANDOM_LOAD_BATCH) {
+    const batch = offsets.slice(i, i + RANDOM_LOAD_BATCH);
+    const results = await Promise.allSettled(batch.map(off => load({
+      hierarchy: nav.hierarchy, offset: off, count: 1, multi_session_key: sessionKey
+    })));
+    results.forEach((res, idx) => {
+      const off = batch[idx];
+      if (res.status !== "fulfilled") {
+        if (DEBUG) console.error("load offset", off, "failed:", res.reason && res.reason.message);
+        return;
+      }
+      const item = res.value.items && res.value.items[0];
       if (item && item.hint !== "header") {
         albums.push({
           offset:    off,
@@ -476,29 +486,34 @@ async function pickRandomAlbums(count, filter) {
           image_key: item.image_key || null
         });
       }
-    } catch (e) {
-      if (DEBUG) console.error("load offset", off, "failed:", e.message);
-    }
+    });
   }
   return { albums, total };
 }
 
 // ---------------------------------------------------------------------------
+// Set of album titles (lowercased, trimmed) played since cutoffMs. Empty Set
+// if the plays DB is unavailable or the query fails — callers degrade to
+// treating everything as unplayed / picking pure-random.
+function getPlayedTitlesSince(cutoffMs) {
+  if (!labelsDb) return new Set();
+  try {
+    return new Set(
+      labelsDb.prepare("SELECT DISTINCT lower(trim(album)) as a FROM plays WHERE ts > ? AND album != ''")
+              .all(cutoffMs).map(r => r.a)
+    );
+  } catch (e) {
+    return new Set(); // DB unavailable — degrade gracefully
+  }
+}
+
 // Smart-radio pick: prefer albums not played in the last 30 days.
 // Falls back to pure random if the plays table is empty or unavailable.
 // ---------------------------------------------------------------------------
 async function pickSmartAlbum() {
   if (!labelsDb) return (await pickRandomAlbums(1)).albums[0] || null;
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  let recent;
-  try {
-    recent = new Set(
-      labelsDb.prepare("SELECT DISTINCT lower(trim(album)) as a FROM plays WHERE ts > ? AND album != ''")
-              .all(cutoff).map(r => r.a)
-    );
-  } catch (e) {
-    recent = new Set(); // DB unavailable — degrade gracefully to pure-random pick
-  }
+  const recent = getPlayedTitlesSince(cutoff);
   if (recent.size === 0) return (await pickRandomAlbums(1)).albums[0] || null;
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidates = (await pickRandomAlbums(5)).albums;
@@ -765,6 +780,22 @@ function makeFavIdsCache({ name, fetchIds, cacheMs = 60 * 1000, staleMaxMs = 10 
 // each tab tap would otherwise hit the rate-limit-sensitive unofficial APIs.
 // Values are cached RAW; favourite flags are applied per request from the
 // (fresher) fav-ids caches. Errors are not cached — a failed fetch just throws.
+// FNV-1a string hash, used as a stable seed for deterministic daily/weekly
+// picks (e.g. album-of-the-day, label-of-the-week). Returns an unsigned 32-bit
+// int — callers do `hash % n` (via `>>> 0`) to pick an index.
+function fnv1aHash(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+// Parse Roon's "N Albums" (or "N albums") subtitle count, e.g. on a genre or
+// label browse item. Returns the parsed integer, or null if no count parses.
+function parseAlbumCount(subtitle) {
+  const m = /(\d[\d,]*)\s*albums?/i.exec(subtitle || "");
+  return m ? parseInt(m[1].replace(/,/g, ""), 10) : null;
+}
+
 function makeTtlCache(ttlMs) {
   const map = new Map(); // key → { value, at }
   return {
@@ -2986,15 +3017,7 @@ app.get("/api/home/unplayed", async (req, res) => {
   try {
     await ensureAlbumIndex();   // build the album index if it isn't ready yet
     const cutoff = Date.now() - months * 30 * 24 * 60 * 60 * 1000;
-    let heard = new Set();
-    if (labelsDb) {
-      try {
-        heard = new Set(
-          labelsDb.prepare("SELECT DISTINCT lower(trim(album)) as a FROM plays WHERE ts > ? AND album != ''")
-                  .all(cutoff).map(r => r.a)
-        );
-      } catch (e) { heard = new Set(); /* DB unavailable — treat everything as unplayed */ }
-    }
+    const heard = getPlayedTitlesSince(cutoff);
     const pool = [];
     for (const al of albumIndex.albums) {
       const t = (al.title || "").toLowerCase().trim();
@@ -3028,9 +3051,7 @@ app.get("/api/home/album-of-the-day", async (req, res) => {
     // Deterministic index from the local date (YYYY-MM-DD).
     const now = new Date();
     const dstr = now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate();
-    let h = 2166136261;
-    for (let i = 0; i < dstr.length; i++) { h ^= dstr.charCodeAt(i); h = Math.imul(h, 16777619); }
-    const al = albums[(h >>> 0) % albums.length];
+    const al = albums[fnv1aHash(dstr) % albums.length];
     // Played today? (plays table records the album title.)
     let played = false;
     if (labelsDb) {
@@ -3086,9 +3107,7 @@ app.get("/api/home/label-of-the-week", (req, res) => {
       lotwCache = { weekKey: wk, at: Date.now(), count: labelsIndex.map.size, data: empty };
       return res.json(empty);
     }
-    let h = 2166136261;
-    for (let i = 0; i < wk.length; i++) { h ^= wk.charCodeAt(i); h = Math.imul(h, 16777619); }
-    const entry = labelsIndex.map.get(keys[(h >>> 0) % keys.length]);
+    const entry = labelsIndex.map.get(keys[fnv1aHash(wk) % keys.length]);
     const albums = entry.albums.slice(0, 24).map(a => ({
       offset: a.offset, title: a.title || "", subtitle: a.subtitle || "", image_key: a.image_key || null
     }));
@@ -3105,60 +3124,57 @@ app.get("/api/home/label-of-the-week", (req, res) => {
 // Pop/Rock → the Rock/Metal group. The frontend picks a random sub-genre from
 // the chosen group and applies it as a nested genre filter. Cached 30 min
 // (sub-genre lists change only on library edits).
-let genreGroupsCache = { at: 0, data: null };
+const genreGroupsCache = makeTtlCache(30 * 60 * 1000);
 app.get("/api/home/genre-groups", async (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
-  if (genreGroupsCache.data && (Date.now() - genreGroupsCache.at) < 30 * 60 * 1000) {
-    return res.json(genreGroupsCache.data);
-  }
-  const sessionKey = "rra_grp_" + Math.random().toString(36).slice(2, 10);
   try {
-    await browse({ hierarchy: "genres", pop_all: true, multi_session_key: sessionKey });
-    // Find the Pop/Rock parent (tolerant of spacing/naming).
-    const top = await loadLevel(sessionKey, "genres", 1000);
-    const parentItem = top.items.find(i => /pop\s*\/\s*rock/i.test((i.title || "").trim()));
-    if (!parentItem) return res.json({ parent: null, pop: [], rockmetal: [] });
-    const parentTitle = parentItem.title.trim();
-    await browse({ hierarchy: "genres", item_key: parentItem.item_key, multi_session_key: sessionKey });
-    const lvl = await loadLevel(sessionKey, "genres", 1000);
-    // Curated classification of Roon's (AllMusic/Rovi) "Pop/Rock" sub-genre
-    // names. The trap that caused Carole King, Madonna, James Taylor and Duran
-    // Duran to show under Rock/Metal: the word "rock" appears in many SOFT/POP
-    // styles ("Soft Rock", "Contemporary Pop/Rock", "Adult Alternative
-    // Pop/Rock", "Folk-Rock"), so a bare /rock/ test mis-routed them. The rules,
-    // in priority order:
-    //   1. Generic catch-alls ("Pop/Rock", "Rock") every album carries → skip.
-    //   2. Anything with the literal word "pop" → Pop (Contemporary Pop/Rock,
-    //      Indie Pop, Dance-Pop, AM Pop, Power Pop, Pop-Punk, …).
-    //   3. Soft styles with no "pop" (Soft Rock, Folk-Rock, Adult Contemporary,
-    //      Singer/Songwriter, Easy Listening, New Age) → excluded (too soft to
-    //      feature, and never Rock/Metal).
-    //   4. Genuinely hard, guitar-driven styles → Rock/Metal (strict list).
-    //   5. Remaining pop-family styles (Dance, Disco, Synth, New Wave, Soul,
-    //      R&B, Funk, Motown) → Pop.
-    //   6. Anything else → excluded.
-    const CATCHALL_RE = /^(pop\s*\/\s*rock|rock)$/i;
-    const SOFT_RE = /\b(soft\s*rock|folk[\s-]?rock|country[\s-]?rock|adult\s*contemporary|adult\s*alternative|easy\s*listening|singer[\s\/-]*songwriter|new\s*age|lounge|mood\s*music|smooth\s*jazz|yacht\s*rock)\b/i;
-    const HARD_RE = /\b(metal|metalcore|deathcore|grindcore|djent|thrash|sludge|doom|nu[\s-]?metal|power\s*metal|black\s*metal|death\s*metal|speed\s*metal|hair\s*metal|hard\s*rock|album\s*rock|arena\s*rock|classic\s*rock|heartland\s*rock|roots\s*rock|blues[\s-]?rock|southern\s*rock|stoner|space\s*rock|noise\s*rock|math\s*rock|post[\s-]?rock|prog|art\s*rock|krautrock|psychedelic|psychedelia|britpop|grunge|post[\s-]?grunge|punk|hardcore|emo|shoegaze|indie\s*rock|\bindie\b|alternative\s*rock|alternative\/indie|college\s*rock|garage|rockabilly|surf|glam|goth|industrial|ska|rap[\s-]?rock|rap[\s-]?metal|jam\s*band|rock\s*&\s*roll|rock\s*and\s*roll)\b/i;
-    const POPFAM_RE = /\b(pop|dance|disco|synth|new\s*wave|new\s*romantic|electropop|r&b|rhythm\s*&\s*blues|soul|motown|funk|boy\s*band|teen|bubblegum|quiet\s*storm|urban)\b/i;
-    const pop = [], rockmetal = [];
-    for (const it of lvl.items) {
-      const title = (it.title || "").trim();
-      if (!title || it.hint === "header") continue;
-      if (/^albums$/i.test(title)) continue;          // the "Albums" child, not a sub-genre
-      if (CATCHALL_RE.test(title)) continue;          // generic catch-all, not a real style
-      const m = /(\d[\d,]*)\s*albums?/i.exec(it.subtitle || "");
-      const entry = { title, count: m ? parseInt(m[1].replace(/,/g, ""), 10) : 0 };
-      if (/\bpop\b/i.test(title)) pop.push(entry);    // anything "…Pop…" is pop
-      else if (SOFT_RE.test(title)) { /* soft, no "pop" → excluded (never Rock/Metal) */ }
-      else if (HARD_RE.test(title)) rockmetal.push(entry);
-      else if (POPFAM_RE.test(title)) pop.push(entry);
-      // else: excluded (unclassifiable)
-    }
-    const byCount = (a, b) => (b.count || 0) - (a.count || 0);
-    pop.sort(byCount); rockmetal.sort(byCount);
-    const data = { parent: parentTitle, pop, rockmetal };
-    genreGroupsCache = { at: Date.now(), data };
+    const data = await genreGroupsCache.get("groups", async () => {
+      const sessionKey = "rra_grp_" + Math.random().toString(36).slice(2, 10);
+      await browse({ hierarchy: "genres", pop_all: true, multi_session_key: sessionKey });
+      // Find the Pop/Rock parent (tolerant of spacing/naming).
+      const top = await loadLevel(sessionKey, "genres", 1000);
+      const parentItem = top.items.find(i => /pop\s*\/\s*rock/i.test((i.title || "").trim()));
+      if (!parentItem) return { parent: null, pop: [], rockmetal: [] };
+      const parentTitle = parentItem.title.trim();
+      await browse({ hierarchy: "genres", item_key: parentItem.item_key, multi_session_key: sessionKey });
+      const lvl = await loadLevel(sessionKey, "genres", 1000);
+      // Curated classification of Roon's (AllMusic/Rovi) "Pop/Rock" sub-genre
+      // names. The trap that caused Carole King, Madonna, James Taylor and Duran
+      // Duran to show under Rock/Metal: the word "rock" appears in many SOFT/POP
+      // styles ("Soft Rock", "Contemporary Pop/Rock", "Adult Alternative
+      // Pop/Rock", "Folk-Rock"), so a bare /rock/ test mis-routed them. The rules,
+      // in priority order:
+      //   1. Generic catch-alls ("Pop/Rock", "Rock") every album carries → skip.
+      //   2. Anything with the literal word "pop" → Pop (Contemporary Pop/Rock,
+      //      Indie Pop, Dance-Pop, AM Pop, Power Pop, Pop-Punk, …).
+      //   3. Soft styles with no "pop" (Soft Rock, Folk-Rock, Adult Contemporary,
+      //      Singer/Songwriter, Easy Listening, New Age) → excluded (too soft to
+      //      feature, and never Rock/Metal).
+      //   4. Genuinely hard, guitar-driven styles → Rock/Metal (strict list).
+      //   5. Remaining pop-family styles (Dance, Disco, Synth, New Wave, Soul,
+      //      R&B, Funk, Motown) → Pop.
+      //   6. Anything else → excluded.
+      const CATCHALL_RE = /^(pop\s*\/\s*rock|rock)$/i;
+      const SOFT_RE = /\b(soft\s*rock|folk[\s-]?rock|country[\s-]?rock|adult\s*contemporary|adult\s*alternative|easy\s*listening|singer[\s\/-]*songwriter|new\s*age|lounge|mood\s*music|smooth\s*jazz|yacht\s*rock)\b/i;
+      const HARD_RE = /\b(metal|metalcore|deathcore|grindcore|djent|thrash|sludge|doom|nu[\s-]?metal|power\s*metal|black\s*metal|death\s*metal|speed\s*metal|hair\s*metal|hard\s*rock|album\s*rock|arena\s*rock|classic\s*rock|heartland\s*rock|roots\s*rock|blues[\s-]?rock|southern\s*rock|stoner|space\s*rock|noise\s*rock|math\s*rock|post[\s-]?rock|prog|art\s*rock|krautrock|psychedelic|psychedelia|britpop|grunge|post[\s-]?grunge|punk|hardcore|emo|shoegaze|indie\s*rock|\bindie\b|alternative\s*rock|alternative\/indie|college\s*rock|garage|rockabilly|surf|glam|goth|industrial|ska|rap[\s-]?rock|rap[\s-]?metal|jam\s*band|rock\s*&\s*roll|rock\s*and\s*roll)\b/i;
+      const POPFAM_RE = /\b(pop|dance|disco|synth|new\s*wave|new\s*romantic|electropop|r&b|rhythm\s*&\s*blues|soul|motown|funk|boy\s*band|teen|bubblegum|quiet\s*storm|urban)\b/i;
+      const pop = [], rockmetal = [];
+      for (const it of lvl.items) {
+        const title = (it.title || "").trim();
+        if (!title || it.hint === "header") continue;
+        if (/^albums$/i.test(title)) continue;          // the "Albums" child, not a sub-genre
+        if (CATCHALL_RE.test(title)) continue;          // generic catch-all, not a real style
+        const entry = { title, count: parseAlbumCount(it.subtitle) || 0 };
+        if (/\bpop\b/i.test(title)) pop.push(entry);    // anything "…Pop…" is pop
+        else if (SOFT_RE.test(title)) { /* soft, no "pop" → excluded (never Rock/Metal) */ }
+        else if (HARD_RE.test(title)) rockmetal.push(entry);
+        else if (POPFAM_RE.test(title)) pop.push(entry);
+        // else: excluded (unclassifiable)
+      }
+      const byCount = (a, b) => (b.count || 0) - (a.count || 0);
+      pop.sort(byCount); rockmetal.sort(byCount);
+      return { parent: parentTitle, pop, rockmetal };
+    });
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3178,14 +3194,11 @@ app.get("/api/filters/genres", async (req, res) => {
     // the feature degrades instead of going empty.
     const parsed = lvl.items
       .filter(i => i.hint !== "header" && i.title)
-      .map(i => {
-        const m = /(\d[\d,]*)\s*albums?/i.exec(i.subtitle || "");
-        return {
-          title: i.title,
-          subtitle: i.subtitle || "",
-          count: m ? parseInt(m[1].replace(/,/g, ""), 10) : null
-        };
-      });
+      .map(i => ({
+        title: i.title,
+        subtitle: i.subtitle || "",
+        count: parseAlbumCount(i.subtitle)
+      }));
     const anyParsed = parsed.some(g => g.count !== null);
     const genres = (anyParsed
       ? parsed.filter(g => g.count !== null && g.count > 0)
