@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.5.114] — 2026-07-04
+
+### Added
+- **"Random albums" panel now has a vinyl-record watermark** — a line-art record (grooves, centre label, spindle hole, a shine glint) cropped at the panel's top-left corner, matching the clock's size, rotation, thickness and cut-off effect. Contained within the coloured section, theme-aware, behind the tiles, non-interactive. The two panels' watermarks now share one set of placement rules (only the artwork differs), ready for the remaining sections.
+
 ## [1.5.113] — 2026-07-04
 
 ### Changed
