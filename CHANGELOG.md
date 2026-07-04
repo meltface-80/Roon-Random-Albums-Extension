@@ -2,12 +2,6 @@
 
 All notable changes to Roon Random Albums are documented here.
 
-## [1.6.1] — 2026-07-04
-
-### Changed
-- **"Play something unheard" now considers an album unheard if it hasn't been played in the last 12 months** (previously: only albums with *zero* plays ever, all-time — a much stricter bar than the "6 months" it was assumed to use, and stricter than the README's description of a 30-day fallback, which was never actually implemented). A 12-month window naturally includes never-played albums too, and gives a much larger eligible pool on libraries with real listening history, so the plain-random fallback (used once the whole library has been heard recently) should trigger far less often. Applies to both the topbar button and its Apple Shortcuts twin (`/api/shortcut/play-unheard`); the two near-identical implementations were also merged into one shared `pickUnheardAlbum()`.
-- **Reminder: "heard" is entirely self-tracked**, not sourced from Roon. This extension has no Roon API available to it that reports a library-wide last-played date — it only knows about a play if it was running and connected to Roon Core while that play happened (via `scrobbleUpdate`, which watches live zone transport state). Plays from before this extension was first installed, or during any downtime (container stopped, update in progress, etc.), are invisible to it. If Roon ever exposes real per-album/track last-played data through the extension API, that would let this feature (and "Not played in 6 months" on Home) work off Roon's own history instead.
-
 ## [1.6.0] — 2026-07-04
 
 ### Fixed (found by an 8-angle multi-agent review of the v1.5.101–116 Home redesign)
@@ -27,6 +21,10 @@ All notable changes to Roon Random Albums are documented here.
 - Removed dead code left over from the Home redesign: an unused `sessionStorage` cache, the fully-unused `openSearch`/`closeSearch` functions and their inert `#search-toggle` button, a no-op `loadAlbumCount()`, and an unnecessary `typeof` guard.
 - The four Home watermarks (clock/vinyl/tag/note) now each ship one SVG used as a CSS mask (with a `-webkit-mask-image` fallback) instead of two near-identical SVGs per motif for light/dark — the theme swap is now a color change, not a second image.
 - Two silent `catch (e) {}` blocks now carry the explanatory comment this project's conventions require.
+
+### Changed ("Play something unheard")
+- **"Play something unheard" now considers an album unheard if it hasn't been played in the last 12 months** (previously: only albums with *zero* plays ever, all-time — a much stricter bar than the "6 months" it was assumed to use, and stricter than the README's description of a 30-day fallback, which was never actually implemented). A 12-month window naturally includes never-played albums too, and gives a much larger eligible pool on libraries with real listening history, so the plain-random fallback (used once the whole library has been heard recently) should trigger far less often. Applies to both the topbar button and its Apple Shortcuts twin (`/api/shortcut/play-unheard`); the two near-identical implementations were also merged into one shared `pickUnheardAlbum()`.
+- **Reminder: "heard" is entirely self-tracked**, not sourced from Roon. This extension has no Roon API available to it that reports a library-wide last-played date — it only knows about a play if it was running and connected to Roon Core while that play happened (via `scrobbleUpdate`, which watches live zone transport state). Plays from before this extension was first installed, or during any downtime (container stopped, update in progress, etc.), are invisible to it. If Roon ever exposes real per-album/track last-played data through the extension API, that would let this feature (and "Not played in 6 months" on Home) work off Roon's own history instead.
 
 ## [1.5.116] — 2026-07-04
 
