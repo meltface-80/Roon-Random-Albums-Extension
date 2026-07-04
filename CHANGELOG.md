@@ -2,7 +2,7 @@
 
 All notable changes to Roon Random Albums are documented here.
 
-## [1.5.117] — 2026-07-04
+## [1.6.0] — 2026-07-04
 
 ### Fixed (found by an 8-angle multi-agent review of the v1.5.101–116 Home redesign)
 - **A genre/tag filter no longer gets silently wiped on reload.** `bootstrap()` always landed on unfiltered Home after pairing, and `showHome()` unconditionally cleared any filter restored from `localStorage` — so reopening the app after filtering to a genre always dropped back to unfiltered Home and deleted the saved filter. A restored filter now re-opens the filtered wall instead.
