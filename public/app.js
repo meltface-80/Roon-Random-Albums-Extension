@@ -4621,15 +4621,16 @@ initServiceBrowser({
       b.textContent = "BNM";
       art.appendChild(b);
     }
-    card.appendChild(art);
-
+    // Album/artist overlaid on the bottom of the cover so tiles stay square and
+    // pack cleanly in the woven mosaic (no below-tile text breaking the grid).
     const meta = document.createElement("div");
     meta.className = "pf-card-meta";
     const al = document.createElement("div"); al.className = "pf-card-album";  al.textContent = it.album || "";
     const ar = document.createElement("div"); ar.className = "pf-card-artist"; ar.textContent = it.artist || "";
     meta.appendChild(al);
     meta.appendChild(ar);
-    card.appendChild(meta);
+    art.appendChild(meta);
+    card.appendChild(art);
 
     card.addEventListener("click", () => pushView({ kind: "detail", item: it }));
     return card;

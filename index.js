@@ -2947,10 +2947,6 @@ const pitchforkLists       = new Map();  // type → { at, items }
 const pitchforkReviewCache = new Map();  // review URL → { description, score, isBestNewMusic } (successes only)
 const PF_HEADERS = { "User-Agent": BROWSER_UA, "Accept-Language": "en-US,en;q=0.9" };
 
-// Canonical join key for a review URL (strip query/hash AND trailing slash, so
-// the RSS "…/album/" and listing-state "…/album" forms match on merge).
-function pfUrlKey(u) { return String(u || "").split(/[?#]/)[0].replace(/\/+$/, ""); }
-
 function unCdata(s) {
   return s == null ? s : String(s).replace(/^\s*<!\[CDATA\[/, "").replace(/\]\]>\s*$/, "").trim();
 }
@@ -3013,24 +3009,19 @@ function extractPreloadedState(html) {
   return null;
 }
 
-// Best-effort cover-art URL from a listing item object (field name varies).
-function pfCover(node) {
-  const c = node.image || node.photoData || node.tout || node.leadArt || node.coverArt || node.thumbnail;
-  if (!c) return null;
-  if (typeof c === "string") return c || null;
-  if (typeof c.url === "string") return c.url;
-  if (typeof c.src === "string") return c.src;
-  if (Array.isArray(c.sources) && c.sources[0]) return c.sources[0].url || c.sources[0].src || null;
-  if (c.sizes && typeof c.sizes === "object") {
-    const v = Object.values(c.sizes)[0];
-    return typeof v === "string" ? v : (v && v.url) || null;
-  }
-  return null;
+// Square cover URL from a listing item's image.sources (prefer larger sizes).
+function pfListingCover(node) {
+  const s = node.image && node.image.sources;
+  if (!s || typeof s !== "object") return null;
+  return (s.lg && s.lg.url) || (s.xxl && s.xxl.url) || (s.md && s.md.url) || (s.sm && s.sm.url) || null;
 }
 
-// Walk the preloaded state and collect review-item-shaped objects. Matches on
-// shape (a /reviews/albums/ URL + a title) rather than a documented path, and
-// reads artist/score/BNM/cover from any of several candidate field names.
+// Walk the preloaded state and collect review-listing items. Verified shape
+// (2026): each item has contentType "review", a ratingValue object, a url, the
+// title in dangerousHed (HTML) — bare `hed` only exists nested under `source` —
+// the artist in subHed.name, and square covers under image.sources.{lg,md,sm}.
+// Matching on contentType + ratingValue + url (not a fixed path) keeps it
+// resilient to container reshuffles.
 function collectReviewItems(state) {
   const out = [];
   const seen = new Set();
@@ -3040,28 +3031,24 @@ function collectReviewItems(state) {
     const node = stack.pop();
     if (!node || typeof node !== "object") continue;
     if (Array.isArray(node)) { for (const x of node) if (x && typeof x === "object") stack.push(x); continue; }
-    const url   = node.url || node.uri || node.permalink || node.canonicalUrl;
-    const title = node.hed || node.title || node.headline || node.name;
-    if (typeof url === "string" && /\/reviews\/albums\/[^\/?#]/.test(url) && title) {
-      const full = (url.startsWith("http") ? url : "https://pitchfork.com" + url).split(/[?#]/)[0];
+    if (node.contentType === "review" && node.ratingValue && typeof node.url === "string") {
+      const full = (node.url.startsWith("http") ? node.url : "https://pitchfork.com" + node.url).split(/[?#]/)[0];
       if (!seen.has(full)) {
         seen.add(full);
-        const rating = node.ratingValue || node.rating || node.musicRating || null;
-        let score = null, bnm = false;
-        if (rating && typeof rating === "object") {
-          if (rating.score != null && rating.score !== "") score = parseFloat(rating.score);
-          bnm = !!(rating.isBestNewMusic || rating.isBestNewReissue);
-        }
-        const artist = (node.subHed && (node.subHed.name || (typeof node.subHed === "string" ? node.subHed : null)))
-          || (Array.isArray(node.artists) && node.artists[0] && node.artists[0].name)
-          || null;
+        const album = node.dangerousHed
+          ? decodeEntities(stripHtml(String(node.dangerousHed))).trim()
+          : (node.source && node.source.hed ? String(node.source.hed).replace(/\*/g, "").trim() : "");
+        const artist = (node.subHed && node.subHed.name) ? String(node.subHed.name).trim() : null;
+        const rv = node.ratingValue || {};
+        const score = (rv.score != null && rv.score !== "") ? parseFloat(rv.score) : null;
         out.push({
           url:            full,
-          title:          stripHtml(String(title)).trim(),
-          artist:         artist ? stripHtml(String(artist)).trim() : null,
+          album,
+          artist,
           score:          Number.isFinite(score) ? score : null,
-          isBestNewMusic: bnm,
-          cover:          pfCover(node)
+          isBestNewMusic: !!(rv.isBestNewMusic || rv.isBestNewReissue),
+          cover:          pfListingCover(node),
+          date:           node.pubDate || null
         });
       }
     }
@@ -3084,7 +3071,7 @@ async function fetchPitchforkListing(path) {
 function pfItemOut(x) {
   return {
     url:            x.url,
-    album:          x.album || x.title || "",
+    album:          x.album || "",
     artist:         x.artist || null,
     cover:          x.cover || null,
     score:          x.score != null ? x.score : null,
@@ -3094,47 +3081,24 @@ function pfItemOut(x) {
   };
 }
 
+// The listing page carries everything we need (title, artist, score, BNM,
+// square cover), so it's the primary source for both tabs. For the Latest tab
+// only, if the listing parse ever yields nothing (Pitchfork reshapes the page
+// again), fall back to the RSS feed — covers + title, artist derived from the
+// slug, no score — so the page degrades instead of going blank. Best New Music
+// has no equivalent feed. A hard fetch failure throws → the route 500s → the
+// UI shows "couldn't load".
 async function buildPitchforkList(type) {
-  if (type === "best") {
-    const listing = await fetchPitchforkListing("/reviews/best/albums/");
-    return listing
-      .map(x => pfItemOut({ ...x, album: x.title, artist: x.artist || artistFromReviewUrl(x.url, x.title), isBestNewMusic: true }))
-      .filter(it => it.album);
-  }
-  // Latest: RSS backbone (reliable covers) enriched by the listing parse
-  // (artist/score/BNM) joined on canonical review URL. Each source is tolerated
-  // independently, but if BOTH fail we surface an error (so the UI shows
-  // "couldn't load", not an empty list).
-  const [rssR, listR] = await Promise.allSettled([
-    fetchPitchforkRss(),
-    fetchPitchforkListing("/reviews/albums/")
-  ]);
-  if (rssR.status === "rejected" && listR.status === "rejected") {
-    throw new Error((rssR.reason && rssR.reason.message) || "Pitchfork unavailable");
-  }
-  const rss     = rssR.status  === "fulfilled" ? rssR.value  : [];
-  const listing = listR.status === "fulfilled" ? listR.value : [];
-  if (DEBUG && rssR.status === "rejected")  console.error("[pitchfork] rss failed:", rssR.reason && rssR.reason.message);
-  if (DEBUG && listR.status === "rejected") console.error("[pitchfork] listing failed:", listR.reason && listR.reason.message);
-  const byUrl = new Map(listing.map(x => [pfUrlKey(x.url), x]));
-  if (rss.length) {
-    return rss.map(r => {
-      const l = byUrl.get(pfUrlKey(r.url)) || {};
-      return pfItemOut({
-        url:            r.url,
-        album:          r.album || l.title,
-        artist:         l.artist || artistFromReviewUrl(r.url, r.album),
-        cover:          r.cover || l.cover,
-        score:          l.score,
-        isBestNewMusic: l.isBestNewMusic,
-        date:           r.date,
-        blurb:          r.blurb
-      });
-    }).filter(it => it.album);
-  }
-  // RSS unavailable — listing alone (artist from parse or slug fallback).
-  return listing
-    .map(x => pfItemOut({ ...x, album: x.title, artist: x.artist || artistFromReviewUrl(x.url, x.title) }))
+  const path = type === "best" ? "/reviews/best/albums/" : "/reviews/albums/";
+  const items = (await fetchPitchforkListing(path)).map(pfItemOut).filter(it => it.album);
+  if (items.length || type === "best") return items;
+  const rss = await fetchPitchforkRss().catch(e => {
+    if (DEBUG) console.error("[pitchfork] rss fallback failed:", e.message);
+    return [];
+  });
+  return rss
+    .map(r => pfItemOut({ url: r.url, album: r.album, artist: artistFromReviewUrl(r.url, r.album),
+                          cover: r.cover, date: r.date, blurb: r.blurb }))
     .filter(it => it.album);
 }
 

@@ -2,6 +2,15 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.2] — 2026-07-05
+
+### Fixed
+- **Best New Music tab now populates, and Latest reviews now show their scores.** The listing-page parser was matching against a guessed JSON shape and finding nothing (so Best New Music was empty and Latest had no score badges). Rewritten against the real Pitchfork page structure — each review item is read from `contentType:"review"` objects (`dangerousHed` title, `subHed.name` artist, `ratingValue.score`/`isBestNewMusic`, square `image.sources` covers) — verified against the live pages (96 latest / 30 best, every item with score, cover and artist).
+- Because the listing now reliably carries square cover art + all fields, it's the primary source for both tabs; the RSS feed is kept only as a Latest-tab fallback if the listing shape ever changes again. This removes the earlier RSS↔listing URL-join entirely.
+
+### Changed
+- **Deliberate "woven" mosaic layout** — the tiles now alternate one large square with two small squares stacked beside it, the large one switching sides row to row, for a magazine feel. Album/artist sit in a gradient overlay on each cover, and every tile is force-squared (an absolutely-positioned cover) so an off-square source image can no longer make tiles uneven — the accidental little/large sizing in the first build.
+
 ## [1.6.1] — 2026-07-05
 
 ### Added
