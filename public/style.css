@@ -652,6 +652,11 @@ main {
 .modal-close { position: absolute; top: 12px; right: 12px; z-index: 2; }
 
 .modal-body {
+  /* Positioned (NO z-index) so it paints above the #modal-ambient glow layer
+     (positioned, z-index:0, earlier in the DOM) WITHOUT creating a stacking
+     context — the np popovers inside (z-index:6) must keep beating the pinned
+     close/share buttons (z-index:2) in the panel's context. */
+  position: relative;
   display: flex; flex-direction: column;
   gap: 22px;
   padding: 64px 18px 40px;
@@ -780,7 +785,9 @@ main {
 /* ------------------------------------------------------------------ */
 /*  Bio sections (album notes + artist profile)                        */
 /* ------------------------------------------------------------------ */
-.bio-section { margin-top: 24px; }
+/* 14px = the gap below the Tracks panel now that both are padded panels
+   (#album-bio-section is the class's only consumer). */
+.bio-section { margin-top: 14px; }
 .bio-meta {
   font-size: 13px;
   color: var(--text-dim);
@@ -2455,11 +2462,18 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
 /* Each Home section sits in its own softly-tinted panel so the rows read as
    distinct blocks: grey (unplayed), teal (random), violet (label of the week),
-   amber (genres) — muted in dark mode, pastel in light mode. */
+   amber (genres) — muted in dark mode, pastel in light mode.
+   The album modal's Tracks (.track-list-wrap) and About (#album-bio-section)
+   panels share this exact recipe (shell, watermark placement, theme flip) so
+   the two screens stay in sync — their deltas (tint choice, lower watermark
+   opacity for text-heavy panels) live in the "Album detail refresh" section
+   at the end of this file. */
 .home-section-unplayed,
 .home-section-random,
 .home-section-lotw,
-.home-section-genres {
+.home-section-genres,
+.track-list-wrap,
+#album-bio-section {
   border-radius: 16px;
   padding: 14px 14px 12px;
 }
@@ -2484,15 +2498,21 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 .home-section-unplayed,
 .home-section-random,
 .home-section-lotw,
-.home-section-genres { position: relative; overflow: hidden; }
+.home-section-genres,
+.track-list-wrap,
+#album-bio-section { position: relative; overflow: hidden; }
 .home-section-unplayed > *,
 .home-section-random > *,
 .home-section-lotw > *,
-.home-section-genres > * { position: relative; z-index: 1; }
+.home-section-genres > *,
+.track-list-wrap > *,
+#album-bio-section > * { position: relative; z-index: 1; }
 .home-section-unplayed::before,
 .home-section-random::before,
 .home-section-lotw::before,
-.home-section-genres::before {
+.home-section-genres::before,
+.track-list-wrap::before,
+#album-bio-section::before {
   content: "";
   position: absolute;
   top: -92px;
@@ -2511,7 +2531,9 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 [data-theme="light"] .home-section-unplayed::before,
 [data-theme="light"] .home-section-random::before,
 [data-theme="light"] .home-section-lotw::before,
-[data-theme="light"] .home-section-genres::before {
+[data-theme="light"] .home-section-genres::before,
+[data-theme="light"] .track-list-wrap::before,
+[data-theme="light"] #album-bio-section::before {
   opacity: .14;
   background-color: #1a2740;
 }
@@ -2520,8 +2542,9 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2040%20a60%2060%200%201%200%200%20120%20a60%2060%200%201%200%200%20-120%20Z'%2F%3E%3Cpath%20d%3D'M100%2045.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M151%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M100%20147.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M49%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'6'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'62'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'120'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E");
           mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2040%20a60%2060%200%201%200%200%20120%20a60%2060%200%201%200%200%20-120%20Z'%2F%3E%3Cpath%20d%3D'M100%2045.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M151%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M100%20147.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z%20M49%2096.6%20a3.4%203.4%200%201%200%200%206.8%20a3.4%203.4%200%201%200%200%20-6.8%20Z'%2F%3E%3Ccircle%20cx%3D'100'%20cy%3D'100'%20r%3D'6'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'100'%20y2%3D'62'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3Cline%20x1%3D'100'%20y1%3D'100'%20x2%3D'134'%20y2%3D'120'%20stroke%3D'%23ffffff'%20stroke-width%3D'8'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E");
 }
-/* "Random albums" — vinyl record. */
-.home-section-random::before {
+/* "Random albums" — vinyl record (shared by the album modal's Tracks panel). */
+.home-section-random::before,
+.track-list-wrap::before {
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2075%20a25%2025%200%201%200%200%2050%20a25%2025%200%201%200%200%20-50%20Z'%2F%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2081%20a19%2019%200%201%200%200%2038%20a19%2019%200%201%200%200%20-38%20Z%20M100%2095.5%20a4.5%204.5%200%201%200%200%209%20a4.5%204.5%200%201%200%200%20-9%20Z'%2F%3E%3C%2Fsvg%3E");
           mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2028%20a72%2072%200%201%200%200%20144%20a72%2072%200%201%200%200%20-144%20Z%20M100%2075%20a25%2025%200%201%200%200%2050%20a25%2025%200%201%200%200%20-50%20Z'%2F%3E%3Cpath%20fill-rule%3D'evenodd'%20d%3D'M100%2081%20a19%2019%200%201%200%200%2038%20a19%2019%200%201%200%200%20-38%20Z%20M100%2095.5%20a4.5%204.5%200%201%200%200%209%20a4.5%204.5%200%201%200%200%20-9%20Z'%2F%3E%3C%2Fsvg%3E");
 }
@@ -2595,3 +2618,69 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   box-shadow: 0 1px 4px rgba(0,0,0,.4);
 }
 [data-theme="light"] .aotd-badge { color: #ffffff; }
+
+/* ------------------------------------------------------------------ */
+/*  Album detail refresh — Home-language styling (v1.6.6)              */
+/*  The detail modal borrows the Home screen's visual language:        */
+/*  1. an ambient blurred-cover glow washing the top of the panel,     */
+/*  2. Tracks + "About this album" as tinted 16px panels with the      */
+/*     Home cut-off watermark treatment (vinyl / quote marks),         */
+/*  3. softer hairline track separators tuned for tinted panels.       */
+/*  Deliberately quiet: low opacities, existing Home tint variables.   */
+/* ------------------------------------------------------------------ */
+
+/* 1 — Ambient cover glow. Absolutely positioned inside .modal-panel
+   (which already has overflow:hidden), so it sits behind the scrolling
+   body as a fixed wash. scale() pushes the blur's fringed edges outside
+   the panel; the mask fades it to nothing well above mid-panel so text
+   further down never sits on it. Decorative only: pointer-events none. */
+.modal-ambient {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 42%;
+  max-height: 380px;
+  object-fit: cover;
+  filter: blur(48px) saturate(1.15);
+  transform: scale(1.5);
+  opacity: .22;
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, rgba(0,0,0,.55) 55%, transparent 100%);
+          mask-image: linear-gradient(to bottom, black 0%, rgba(0,0,0,.55) 55%, transparent 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+/* Light theme: a blurred cover over a white panel reads stronger than the
+   same opacity over near-black, so pull it back further. */
+[data-theme="light"] .modal-ambient { opacity: .14; }
+/* The Roon-style Now playing screen keeps its own clean look. */
+.modal.np-mode .modal-ambient { display: none; }
+
+/* 2 — Home-style tinted panels. The panel shell, watermark placement, theme
+   flip, and the Tracks panel's vinyl motif are all SHARED with the Home
+   section rules (grouped selectors around line 2460) — only the deltas live
+   here. Tracks reuses the Random-albums teal (vinyl motif matches it);
+   About this album reuses the Label-of-the-week violet. */
+.track-list-wrap    { background: var(--home-random-bg); }
+#album-bio-section  { background: var(--home-lotw-bg); }
+
+/* Watermarks sit under dense text here (unlike Home's tile rows), so run
+   them fainter than Home's .11 dark / .14 light. Same specificity as the
+   shared rules, later in the file — these win by source order. */
+.track-list-wrap::before,
+#album-bio-section::before { opacity: .07; }
+[data-theme="light"] .track-list-wrap::before,
+[data-theme="light"] #album-bio-section::before { opacity: .08; }
+
+/* About this album — oversized quotation marks (editorial voice). */
+#album-bio-section::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20d%3D'M62%2058%20C44%2058%2030%2072%2030%2092%20C30%20112%2044%20124%2060%20124%20C61%20124%2062%20124%2063%20124%20C58%20138%2046%20146%2034%20148%20L34%20162%20C64%20158%2088%20136%2088%2098%20C88%2074%2077%2058%2062%2058%20Z%20M142%2058%20C124%2058%20110%2072%20110%2092%20C110%20112%20124%20124%20140%20124%20C141%20124%20142%20124%20143%20124%20C138%20138%20126%20146%20114%20148%20L114%20162%20C144%20158%20168%20136%20168%2098%20C168%2074%20157%2058%20142%2058%20Z'%2F%3E%3C%2Fsvg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20200'%20fill%3D'%23ffffff'%3E%3Cpath%20d%3D'M62%2058%20C44%2058%2030%2072%2030%2092%20C30%20112%2044%20124%2060%20124%20C61%20124%2062%20124%2063%20124%20C58%20138%2046%20146%2034%20148%20L34%20162%20C64%20158%2088%20136%2088%2098%20C88%2074%2077%2058%2062%2058%20Z%20M142%2058%20C124%2058%20110%2072%20110%2092%20C110%20112%20124%20124%20140%20124%20C141%20124%20142%20124%20143%20124%20C138%20138%20126%20146%20114%20148%20L114%20162%20C144%20158%20168%20136%20168%2098%20C168%2074%20157%2058%20142%2058%20Z'%2F%3E%3C%2Fsvg%3E");
+}
+
+/* 3 — Track rows: translucent hairlines instead of the solid --border,
+   which fights the tinted background; the framing border-top goes — the
+   panel itself now frames the list. Last row keeps the panel's bottom
+   padding clean. */
+.track-list-wrap .track-list { border-top: 0; }
+.track-list-wrap .track-list li { border-bottom: 1px solid rgba(255,255,255,.07); }
+.track-list-wrap .track-list li:last-child { border-bottom: 0; }
+[data-theme="light"] .track-list-wrap .track-list li { border-bottom: 1px solid rgba(26,39,64,.12); }
+[data-theme="light"] .track-list-wrap .track-list li:last-child { border-bottom: 0; }

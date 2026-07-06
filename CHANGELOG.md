@@ -2,6 +2,19 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.6] — 2026-07-06
+
+### Changed
+- **Album detail refresh — the album view now speaks the Home screen's visual language.**
+  - **Ambient cover glow** — the album's own artwork, heavily blurred and faded, washes the top of the detail panel so every album subtly tints its own view (dark and light theme tuned separately; decorative only — never intercepts taps, hidden when the album has no art, and reuses the exact same image URL as the cover so no extra download happens).
+  - **Home-style panels** — the Tracks list and "About this album" sections now sit in the same softly-tinted rounded panels as the Home rows, complete with the cut-off corner watermark treatment: the vinyl-record motif (shared with Home's Random albums row) on Tracks, and a new oversized quotation-marks motif on the review panel. Watermarks run fainter than Home's because these panels carry dense text.
+  - **Softer track rows** — translucent hairline separators replace the solid border colour, which fought the tinted background; the list's framing top border is gone since the panel itself now frames it.
+  - The Now playing screen (transport-bar view) and Queue tab are deliberately untouched.
+- **Shared panel infrastructure** — the modal panels reuse the Home sections' CSS rules (shell, watermark placement, theme flip, vinyl mask) rather than duplicating them, so future tweaks to the Home panel recipe automatically stay in sync with the album view. (Code-review finding: an earlier draft duplicated the ~500-char SVG mask data-URI and the placement block verbatim.)
+
+### Fixed
+- **Code-review finding (stacking context)** — an early draft gave the modal's scrolling body `z-index: 1`, which would have trapped the now-playing device/volume popovers *below* the pinned close/share buttons on short viewports. The body is now positioned without a z-index (paints above the glow by DOM order, creates no stacking context), preserving the popovers' original paint order. Error class: CSS stacking-context introduced on a shared container — caught by the cross-file tracer angle before commit.
+
 ## [1.6.5] — 2026-07-06
 
 ### Fixed

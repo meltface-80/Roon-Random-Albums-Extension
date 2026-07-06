@@ -906,6 +906,21 @@
   let currentSource = "random";
   let currentSourceZoneId = null;
 
+  // Ambient glow layer behind the modal header — mirrors the cover image so
+  // the blur always matches the art shown. Same URL as #modal-img, so the
+  // browser serves it from cache (no second fetch). Pass null to hide.
+  const modalAmbient = document.getElementById("modal-ambient");
+  function setModalAmbient(url) {
+    if (!modalAmbient) return;
+    if (url) {
+      modalAmbient.src = url;
+      modalAmbient.classList.remove("hidden");
+    } else {
+      modalAmbient.removeAttribute("src");
+      modalAmbient.classList.add("hidden");
+    }
+  }
+
   function setModalArtist(subtitle) {
     modalSub.innerHTML = "";
     if (!subtitle) return;
@@ -971,9 +986,11 @@
     if (album.image_key) {
       modalImg.src = `/api/image/${encodeURIComponent(album.image_key)}?size=800`;
       modalImg.style.display = "";
+      setModalAmbient(modalImg.src);
     } else {
       modalImg.removeAttribute("src");
       modalImg.style.display = "none";
+      setModalAmbient(null);
     }
     modal.classList.remove("hidden");
     document.body.style.overflow = "hidden";
@@ -1029,6 +1046,7 @@
       if (j.album.subtitle) setModalArtist(j.album.subtitle);
       if (j.album.image_key) {
         modalImg.src = `/api/image/${encodeURIComponent(j.album.image_key)}?size=800`;
+        setModalAmbient(modalImg.src);
       }
     }
     const wrap = document.querySelector(".track-list-wrap");
