@@ -172,7 +172,7 @@ The user manually publishes releases on GitHub when they are satisfied with test
 - The README contains version references (install commands, tarball URLs, `docker build` tags).
 - **Do not change any version number in README.md** unless the user explicitly says
   "promote to latest" or "update the README".
-- Current stable version in the README: **v1.6.4** (until the user says otherwise).
+- Current stable version in the README: **v1.6.5** (until the user says otherwise).
 
 ---
 
@@ -250,4 +250,5 @@ docker run -d \
 | v1.5.94–v1.5.116 | superseded | Home landing redesign (Not played / Random / Label of the week / Browse by genre rows, watermarks) |
 | v1.6.0  | stable (superseded) | Home redesign stability pass — 8-angle review fixes; "Play something unheard" 12-month window |
 | v1.6.1–v1.6.3 | superseded | Pitchfork magazine page (listing scraper, woven mosaic, review fixes) |
-| v1.6.4  | **Latest (stable)** | Global search (library + Qobuz + Tidal + Pitchfork), Pitchfork × on title row — README points here |
+| v1.6.4  | stable (superseded) | Global search (library + Qobuz + Tidal + Pitchfork), Pitchfork × on title row |
+| v1.6.5  | **Latest (stable)** | Clean docker build — music-metadata 11 (0 audit vulns), node-uuid→uuid override, quiet npm install — README points here |
