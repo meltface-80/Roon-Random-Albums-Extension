@@ -2,6 +2,15 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.9] — 2026-07-07
+
+### Changed
+- **Album view — the cover now visibly glows under the art.** The ambient backdrop introduced in v1.6.6 was a heavy 48px blur that read as a colour wash; it is now a lighter 30px blur at slightly higher opacity and taller reach, so a faint but recognisable image of the album cover sits beneath the artwork, fading out down the panel. Tuned separately for dark and light themes.
+- **Now playing screen — separated from Roon's look, now in the extension's own visual language.** The track title, artist, album link, progress bar and transport controls sit in a Home-style tinted rounded panel (the amber tint — completing all four Home tints inside the modal) with a new cut-off equaliser-bars watermark. The ambient cover glow now shows on the Now playing tab too (previously it was deliberately suppressed there to preserve the Roon-style look). The device and volume controls stay outside the panel so their pop-up menus are never clipped by the panel's watermark cropping. No JS changes — the live transport wiring is untouched.
+
+### Fixed
+- **Code-review finding (hover regression)** — the new panel-scoped translucent hover fill out-ranked the play/pause button's solid hover fill, which would have left its icon nearly invisible on desktop hover. The rule now excludes the play/pause button (`:not(.np-playpause)`), and the retired base hover rule that all three transport buttons no longer reach was removed rather than shadowed. Error class: a broad descendant rule silently out-ranking a sibling component's state style — caught by the simplification/removed-behaviour review angles before commit.
+
 ## [1.6.8] — 2026-07-07
 
 ### Fixed
