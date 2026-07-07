@@ -2,6 +2,14 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.14] — 2026-07-07
+
+### Fixed
+- **Landscape Now playing on tablets and desktops** — broken by the v1.6.13 layout change: at ≥720px the modal panel is a centred auto-height dialog, so the height-driven artwork had nothing to size against and collapsed to zero — the screen shrank to a small floating box with no album art. Now playing is now a full-screen view at every size (Roon parity), and landscape tablets/desktops get a proper two-pane layout: tabs centred on top, big album art on the left, track/seek/transport on the right. Verified headlessly at 1400×900, 1080×810 (tablet landscape), 810×1080 (tablet portrait), 390×844 (phone), and short desktop windows (1100×640, 1100×460 — art shrinks, nothing scrolls or clips).
+
+### Changed
+- **The share card adapts to long album titles and long artist lists.** Title and artist each wrap onto up to 4 lines (was 3 and 2), and the text automatically steps down in size (title 56→27px, artist 37→21px) until it fits — an ellipsis only appears when even the smallest size can't hold it. King Gizzard's full 127-character "PetroDragonic Apocalypse…" title and five-artist credit lists now render complete on the card.
+
 ## [1.6.13] — 2026-07-07
 
 ### Changed
