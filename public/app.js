@@ -1390,7 +1390,11 @@
 
       if (extras.album.url && extras.album.source) {
         srcLink.href = extras.album.url;
-        srcLink.textContent = "View on " + extras.album.source;
+        // Pitchfork review text is never shown (UK-law compliance) — the
+        // link is the way to read it, so say so explicitly.
+        srcLink.textContent = extras.album.source === "Pitchfork"
+          ? "Read the full review on Pitchfork"
+          : "View on " + extras.album.source;
         srcLink.classList.remove("hidden");
       } else {
         srcLink.classList.add("hidden");
@@ -4388,19 +4392,27 @@ function initServiceBrowser(cfg) {
       const desc = alb && alb.description;
       review.innerHTML = "";
       if (desc) {
+        // desc is only ever Qobuz/Wikipedia editorial now — Pitchfork review
+        // text is stripped server-side (UK-law compliance).
         const p = document.createElement("div");
         p.className = "qobuz-nr-review-text";
         p.textContent = desc;
         review.appendChild(p);
-        if (alb.url && alb.source) {
-          const link = document.createElement("a");
-          link.className = "qobuz-nr-review-src";
-          link.href = alb.url; link.target = "_blank"; link.rel = "noopener";
-          link.textContent = "View on " + alb.source;
-          review.appendChild(link);
-        }
+      } else if (alb && alb.source === "Pitchfork" && alb.url) {
+        review.textContent = "Pitchfork reviewed this release — read it on pitchfork.com.";
       } else {
         review.textContent = "No review available for this release.";
+      }
+      // The source link renders with OR without text — with Pitchfork the
+      // link IS the review access, so it must not hide behind if(desc).
+      if (alb && alb.url && alb.source) {
+        const link = document.createElement("a");
+        link.className = "qobuz-nr-review-src";
+        link.href = alb.url; link.target = "_blank"; link.rel = "noopener";
+        link.textContent = alb.source === "Pitchfork"
+          ? "Read the review on Pitchfork"
+          : "View on " + alb.source;
+        review.appendChild(link);
       }
     } catch (e) {
       if (detailEl.dataset.albumId === String(album.id)) review.textContent = "Couldn't load review.";
@@ -4936,39 +4948,38 @@ initServiceBrowser({
     const bodyEl = detailEl.querySelector(".pf-detail-body");
     const actEl  = detailEl.querySelector(".pf-detail-actions");
 
-    let data;
+    // COMPLIANCE (UK law): the written review is never displayed in-app.
+    // Paint the note and the actions (led by "Read on Pitchfork") IMMEDIATELY
+    // — nothing they need is remote. The only async piece is the library
+    // match, fetched after, which just upgrades the actions with an
+    // "Open in your library" button when it lands.
+    bodyEl.innerHTML =
+      '<p class="pf-detail-note">The written review can’t be shown here — ' +
+      'tap <strong>Read on Pitchfork</strong> to read it on pitchfork.com.</p>';
+    buildActions(actEl, it, null);
+
     try {
       const qs = "?url=" + encodeURIComponent(it.url) +
                  "&album="  + encodeURIComponent(it.album  || "") +
                  "&artist=" + encodeURIComponent(it.artist || "");
       const r = await fetch("/api/pitchfork/review" + qs);
       if (mySeq !== reqSeq) return;
-      data = await r.json();
-      if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
-    } catch (e) {
-      if (mySeq !== reqSeq) return;
-      bodyEl.innerHTML = '<p class="pf-detail-note">Couldn’t load the full review.</p>';
-      buildActions(actEl, it, null);
-      return;
-    }
-    if (mySeq !== reqSeq) return;
-
-    const desc = data.review && data.review.description;
-    bodyEl.innerHTML = "";
-    if (desc) {
-      desc.split(/\n{2,}|\n/).map(s => s.trim()).filter(Boolean).forEach(par => {
-        const p = document.createElement("p");
-        p.textContent = par;
-        bodyEl.appendChild(p);
-      });
-    } else {
-      bodyEl.innerHTML = '<p class="pf-detail-note">Full review not available here — read it on Pitchfork.</p>';
-    }
-    buildActions(actEl, it, data.match);
+      const data = await r.json();
+      if (r.ok && data.match) buildActions(actEl, it, data.match);
+    } catch (e) { /* library match is optional — the actions already shown work */ }
   }
 
   function buildActions(container, it, match) {
     container.innerHTML = "";
+
+    // Reading happens on pitchfork.com now — make that the first action.
+    const link = document.createElement("a");
+    link.className = "pf-action pf-action-link";
+    link.href = it.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Read on Pitchfork ↗";
+    container.appendChild(link);
 
     // Owned? → open the existing album modal (play/queue live there).
     if (match) {
@@ -4992,15 +5003,6 @@ initServiceBrowser({
     if (tBtn && !tBtn.classList.contains("hidden")) {
       container.appendChild(makeFindBtn("Find on Tidal", tBtn, "tidal-search-input", query));
     }
-
-    // Always: read the source.
-    const link = document.createElement("a");
-    link.className = "pf-action pf-action-link";
-    link.href = it.url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = "View on Pitchfork ↗";
-    container.appendChild(link);
   }
 
   function makeFindBtn(label, toggleBtn, searchInputId, query) {

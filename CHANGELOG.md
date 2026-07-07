@@ -2,6 +2,16 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.11] — 2026-07-07
+
+### Changed
+- **Pitchfork written reviews are no longer displayed anywhere in the app (UK-law compliance).** Scores and Best New Music badges stay everywhere they appeared; in place of the review text the app now links to the review on pitchfork.com:
+  - **Pitchfork magazine page** — a review's detail view keeps the cover, artist/title, score and BNM badge, shows a short notice, and leads its actions with **"Read on Pitchfork ↗"** (followed by Open in your library / Find on Qobuz / Find on Tidal as before).
+  - **Album view "About this album"** — when the review source is Pitchfork, the panel shows no text but keeps the score/BNM in the title line and a **"Read the full review on Pitchfork"** link. Qobuz and Wikipedia editorial descriptions are unaffected and still display in full.
+  - **Qobuz/Tidal browser review section** — same treatment; the source link now renders even when there is no displayable text (previously it hid with the text).
+  - Enforced **server-side at every response boundary**: `/api/album/extras` emits no description for Pitchfork-sourced entries, and `/api/pitchfork/review` no longer serves (or even fetches) the review page at all — it returns only the local library match, since scores/BNM already ship with the listing items. An exhaustive audit traced every producer and consumer of review text to confirm no path remains; the search results, mosaic cards, Home rows, and share card never carried review text to begin with.
+- Side benefits from the review of this change: opening a review's detail no longer performs a throttled full-page scrape of pitchfork.com (the "Read on Pitchfork" link and streaming actions now paint instantly, with the library-match button arriving right after), and the now-dead by-URL scraper and its cache were removed.
+
 ## [1.6.10] — 2026-07-07
 
 ### Added

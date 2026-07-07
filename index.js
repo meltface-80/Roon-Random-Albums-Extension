@@ -2568,12 +2568,12 @@ async function fetchWikipedia(title, artist) {
   return result;
 }
 
-// Shared extractor for a Pitchfork review PAGE: the review body from the JSON-LD
+// Extractor for a Pitchfork review PAGE: the review body from the JSON-LD
 // Review block, plus the score / Best-New-Music flag from the inline preloaded
-// state. Used by BOTH the album-modal scraper (fetchPitchfork) and the magazine's
-// by-URL scraper (fetchPitchforkReviewByUrl) so the two can't drift apart. The
-// body is stripped of HTML but NOT entity-decoded here — fetchPitchfork's
-// consumer decodes downstream; fetchPitchforkReviewByUrl decodes its own copy.
+// state. Sole consumer is fetchPitchfork (album extras). The parsed body NEVER
+// reaches a client (UK-law compliance — only score/BNM/link are emitted); it
+// is read internally by fetchPitchfork's artist-verification guard. The body
+// is stripped of HTML but NOT entity-decoded here; the consumer decodes.
 function parsePitchforkReviewHtml(html) {
   let description = null;
   const ldRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
@@ -2645,8 +2645,13 @@ async function fetchAlbumBios(title, artist) {
 
   let album = null;
   if (pitchfork && pitchfork.description) {
+    // COMPLIANCE (UK law): Pitchfork's written review must not be displayed —
+    // only the score, the Best New Music flag, and a LINK to read the review
+    // on pitchfork.com are emitted. The fetched text stays internal (this
+    // branch's gate and fetchPitchfork's artist-verification guard read it);
+    // the description leaves this function as null.
     album = {
-      description:    pitchfork.description,
+      description:    null,
       year:           (qobuz && qobuz.year) || null,
       label:          (qobuz && qobuz.label) || null,
       url:            pitchfork.url,
@@ -3019,7 +3024,7 @@ const PITCHFORK_LIST_TTL   = 6 * 60 * 60 * 1000;
 // EMPTY result (a parse miss or a served-but-unparseable page), or a recovery
 // would be blocked for the whole TTL. Only non-empty results are stored.
 const pitchforkLists       = new Map();  // type → { at, items }
-const pitchforkReviewCache = new Map();  // review URL → { description, score, isBestNewMusic } (successes only)
+
 const PF_HEADERS = { "User-Agent": BROWSER_UA, "Accept-Language": "en-US,en;q=0.9" };
 
 function unCdata(s) {
@@ -3246,32 +3251,6 @@ async function searchPitchforkReviews(q, limit) {
     }
   }
   return out;
-}
-
-// Scrape one review page by its known canonical URL (from a listing card) for
-// the full body + score + BNM. Unlike fetchPitchfork(), the URL is authoritative
-// here (no slug guessing, no artist guard).
-async function fetchPitchforkReviewByUrl(url) {
-  if (pitchforkReviewCache.has(url)) return pitchforkReviewCache.get(url);
-  try {
-    await pitchforkWait();
-    const html = await httpText(url, PF_HEADERS, 15000);
-    const parsed = parsePitchforkReviewHtml(html);
-    // The frontend renders the body as textContent, so decode entities here
-    // (the shared helper leaves it encoded for fetchPitchfork's own pipeline).
-    const out = {
-      description:    parsed.description ? decodeEntities(parsed.description).trim() || null : null,
-      score:          parsed.score,
-      isBestNewMusic: parsed.isBestNewMusic
-    };
-    pitchforkReviewCache.set(url, out);   // cache successes only
-    return out;
-  } catch (e) {
-    // Do NOT cache a transient failure (403 / timeout) — otherwise a momentary
-    // block would poison this review's detail for the whole process lifetime.
-    if (DEBUG) console.error("[pitchfork] review fetch:", e.message);
-    return null;
-  }
 }
 
 // Confident library match for a review's album/artist, or null. Uses the same
@@ -5101,21 +5080,21 @@ app.get("/api/pitchfork/reviews", async (req, res) => {
   }
 });
 
-// Full review body for one listing card, plus a confident library match (so the
-// card's detail view can offer to play it if the album is in the library).
-app.get("/api/pitchfork/review", async (req, res) => {
+// Library match for one listing card (so the card's detail view can offer to
+// play the album if it's in the library).
+// COMPLIANCE (UK law): the written review is never served — the client links
+// to pitchfork.com instead. The review page is no longer fetched here AT ALL
+// (score/BNM already ship with the listing items), which also spares
+// pitchfork.com a throttled full-page scrape per detail open. `review` is
+// kept as null so any stale client reading the old shape sees no text.
+app.get("/api/pitchfork/review", (req, res) => {
   let u;
   try { u = new URL(String(req.query.url || "")); } catch (e) { return res.status(400).json({ error: "Invalid url" }); }
   if (u.hostname !== "pitchfork.com" || !u.pathname.startsWith("/reviews/albums/")) {
     return res.status(400).json({ error: "Not a Pitchfork album-review URL" });
   }
-  try {
-    const review = await fetchPitchforkReviewByUrl("https://pitchfork.com" + u.pathname);
-    const match  = matchLibraryAlbum(String(req.query.album || ""), String(req.query.artist || ""));
-    res.json({ review, match });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  const match = matchLibraryAlbum(String(req.query.album || ""), String(req.query.artist || ""));
+  res.json({ review: null, match });
 });
 
 // Debug endpoint: dumps the raw items returned by Roon when drilling into an
