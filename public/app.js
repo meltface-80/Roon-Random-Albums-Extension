@@ -1186,6 +1186,11 @@
     }
     const j = await r.json();
 
+    // Modal may have been closed/reopened on a different album while we
+    // waited — bail rather than render album A's rows (whose tap handlers
+    // would fire against album B's offset). Same guard as fetchAlbumExtras.
+    if (album !== currentAlbum) return;
+
     // Only accept server title if it matches what we expected — guards against
     // stale index offsets returning a completely different album after a library change.
     if (j.album && j.album.title) {
@@ -1228,7 +1233,8 @@
         `<div class="modal-error">No playback actions available for this album.</div>`;
     }
 
-    // Tracks
+    // Tracks — each row is tappable and reveals Play now / Queue for that
+    // track (one open row at a time; tapping again collapses it).
     const trackWrap = document.querySelector(".track-list-wrap");
     modalTracks.innerHTML = "";
     const trackList = j.tracks || [];
@@ -1236,15 +1242,80 @@
       trackWrap.classList.add("hidden");
     } else {
       trackWrap.classList.remove("hidden");
-      for (const t of trackList) {
+      trackList.forEach((t, idx) => {
         const li = document.createElement("li");
+        li.className = "t-row";
         const ti = document.createElement("span"); ti.className = "t-title";
         ti.textContent = t.title || "";
         const su = document.createElement("span"); su.className = "t-sub";
         su.textContent = t.subtitle || "";
         li.appendChild(ti); li.appendChild(su);
+        li.addEventListener("click", (e) => {
+          if (e.target.closest(".t-actions")) return;   // taps on the buttons themselves
+          toggleTrackActions(li, t, idx);
+        });
         modalTracks.appendChild(li);
-      }
+      });
+    }
+  }
+
+  // Expand/collapse the per-track action row. Only one row is open at a time.
+  function closeTrackRow(li) {
+    li.classList.remove("is-open");
+    const row = li.querySelector(".t-actions");
+    if (row) row.remove();
+  }
+  function toggleTrackActions(li, track, index) {
+    const wasOpen = li.classList.contains("is-open");
+    const open = modalTracks.querySelector("li.is-open");
+    if (open) closeTrackRow(open);
+    if (wasOpen) return;
+
+    li.classList.add("is-open");
+    const row = document.createElement("div");
+    row.className = "t-actions";
+    const mk = (label, kind, primary) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "action-btn t-act" + (primary ? " primary" : "");
+      b.textContent = label;
+      b.addEventListener("click", () => invokeTrack(kind, b, track, index, li));
+      return b;
+    };
+    row.appendChild(mk("Play now", "play_now", true));
+    row.appendChild(mk("Queue", "queue", false));
+    li.appendChild(row);
+  }
+
+  // Mirrors invoke() for a single track (same zone + filter handling).
+  async function invokeTrack(kind, btn, track, index, li) {
+    if (!currentAlbum) return;
+    if (!selectedZoneId) { showToast("Pick a zone first", "error"); return; }
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = "…";
+    try {
+      const r = await fetch("/api/play-track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          offset: currentAlbum.offset,
+          track:  index,
+          title:  track.title || "",
+          zone_or_output_id: selectedZoneId,
+          kind,
+          filter_type:   currentDetailFilter ? currentDetailFilter.type   : "",
+          filter_value:  currentDetailFilter ? currentDetailFilter.value  : "",
+          filter_parent: currentDetailFilter && currentDetailFilter.parent ? currentDetailFilter.parent : ""
+        })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      showToast(`${j.action || orig}: ${track.title} → ${zoneName(selectedZoneId)}`);
+      // Success — collapse the action row; the user stays on the album.
+      closeTrackRow(li);
+    } catch (e) {
+      showToast(e.message, "error");
+      btn.disabled = false; btn.textContent = orig;
     }
   }
 

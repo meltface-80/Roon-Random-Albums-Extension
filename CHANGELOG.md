@@ -2,6 +2,15 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.10] — 2026-07-07
+
+### Added
+- **Selectable tracks in the album view.** Tapping any track row expands it in place with two actions — **Play now** and **Queue** — for that single track (one row open at a time; tap again to collapse). Actions target the selected zone, work with genre/decade/tag/label filters active, and show the usual confirmation toast. Under the hood a new `/api/play-track` endpoint re-resolves the album by offset, finds the tapped track with the same filter the track listing uses (so indexes always align), verifies the track title before firing — if the library changed since the modal opened the tap is re-matched by title, and if the track is gone the app says so instead of playing the wrong thing — then drills into Roon's per-track action menu.
+- The shared album drill-in was extracted into one helper used by both album-level and per-track actions (`loadAlbumSession` + `drillActionMenu`), byte-equivalent to the previous behaviour for every existing play path (verified against the old code in review).
+
+### Fixed
+- Code-review findings, all fixed pre-commit: the per-track action buttons reuse the standard `.action-btn` recipe at a proper 38px tap target (the first draft's pills were ~31px, below the app's own touch norm); the track-drill response is now sanity-checked so a non-list reply errors instead of reporting false success; the track index is validated as an integer; and `fetchAlbumDetail` now bails if the modal moved to a different album while the response was in flight — previously a cosmetic race, but with live tap handlers on the rows it could have fired a track action against the wrong album.
+
 ## [1.6.9] — 2026-07-07
 
 ### Changed

@@ -527,7 +527,11 @@ async function pickSmartAlbum() {
 // Resolve an album by offset, drill in, and return action menu + tracks.
 // Optionally invokes one of the actions (kind) against a zone.
 // ---------------------------------------------------------------------------
-async function openAlbumByOffset(offset, zoneOrOutputId, invokeKind, filter) {
+// Shared drill-in for album-level AND per-track actions: navigate to the
+// album list this offset belongs to, re-resolve the album's session item_key,
+// open it, and load its contents. item_keys are session-scoped, so every
+// request must rebuild this state from scratch.
+async function loadAlbumSession(offset, filter) {
   const sessionKey = "rra_open_" + Math.random().toString(36).slice(2, 10);
 
   // 1) Navigate to the album list this offset belongs to (full library, or a
@@ -544,12 +548,6 @@ async function openAlbumByOffset(offset, zoneOrOutputId, invokeKind, filter) {
   });
   const albumItem = albumLoad.items && albumLoad.items[0];
   if (!albumItem) throw new Error("Album not found at offset " + offset);
-
-  const albumInfo = {
-    title:     albumItem.title || "",
-    subtitle:  albumItem.subtitle || "",
-    image_key: albumItem.image_key || null
-  };
 
   // 3) Drill into the album
   const drill = await browse({
@@ -587,36 +585,44 @@ async function openAlbumByOffset(offset, zoneOrOutputId, invokeKind, filter) {
        i.hint === "action_list" && !i.subtitle
   );
 
-  // 6) Tracks = items that aren't the play menu, a no-subtitle submenu
-  //    (e.g. "Add to Library"), or a section header.  Strip Roon's leading
-  //    "N. " from titles because the UI renders its own counter.
+  return { sessionKey, hierarchy, albumItem, items, playMenu };
+}
+
+// A track = an item that isn't the play menu, a no-subtitle submenu
+// (e.g. "Add to Library"), or a section header. Shared by the detail
+// listing and per-track actions so their indexes always align.
+function isTrackItem(t, playMenu) {
+  if (t === playMenu)                          return false;
+  if (t.hint === "action_list" && !t.subtitle) return false;
+  if (t.hint === "header")                     return false;
+  return true;
+}
+
+// Roon prefixes track titles with "N. "; the UI renders its own counter.
+function stripTrackNumber(title) {
+  return (title || "").replace(/^\d+\.\s+/, "");
+}
+
+async function openAlbumByOffset(offset, zoneOrOutputId, invokeKind, filter) {
+  const { sessionKey, hierarchy, albumItem, items, playMenu } =
+    await loadAlbumSession(offset, filter);
+
+  const albumInfo = {
+    title:     albumItem.title || "",
+    subtitle:  albumItem.subtitle || "",
+    image_key: albumItem.image_key || null
+  };
+
   const tracks = items
-    .filter(t => {
-      if (t === playMenu)                          return false;
-      if (t.hint === "action_list" && !t.subtitle) return false;
-      if (t.hint === "header")                     return false;
-      return true;
-    })
+    .filter(t => isTrackItem(t, playMenu))
     .map(t => ({
-      title:    (t.title || "").replace(/^\d+\.\s+/, ""),
+      title:    stripTrackNumber(t.title),
       subtitle: t.subtitle || ""
     }));
 
   let actions = [];
   if (playMenu) {
-    // Drill into Play menu
-    await browse({
-      hierarchy,
-      item_key:  playMenu.item_key,
-      multi_session_key: sessionKey
-    });
-    const acts = await load({ hierarchy, multi_session_key: sessionKey });
-    actions = (acts.items || []).map(a => ({
-      item_key: a.item_key,
-      title:    a.title || "",
-      hint:     a.hint  || "",
-      kind:     classifyAction(a.title)
-    }));
+    actions = await drillActionMenu(hierarchy, sessionKey, playMenu.item_key);
   }
 
   // 7) Optionally invoke one
@@ -652,6 +658,66 @@ function classifyAction(title) {
 function matchAction(actions, kind) {
   return actions.find(a => a.kind === kind)
       || (kind === "play_now" ? actions.find(a => /^play/i.test(a.title)) : null);
+}
+
+// Drill into an action_list item (the album's Play menu, or a single track)
+// and return its classified actions. The action check guards against a
+// non-list response — without it, the follow-up load would re-read the
+// CURRENT level and the caller could "invoke" a misclassified item and
+// report false success.
+async function drillActionMenu(hierarchy, sessionKey, itemKey) {
+  const d = await browse({ hierarchy, item_key: itemKey, multi_session_key: sessionKey });
+  if (d.action !== "list") {
+    throw new Error("Unexpected browse action: " + d.action);
+  }
+  const acts = await load({ hierarchy, multi_session_key: sessionKey });
+  return (acts.items || []).map(a => ({
+    item_key: a.item_key,
+    title:    a.title || "",
+    hint:     a.hint  || "",
+    kind:     classifyAction(a.title)
+  }));
+}
+
+// Play or queue ONE track of an album. `trackIndex` is a position in the
+// same filtered track list /api/album returns (isTrackItem keeps the two
+// aligned), and the tap's title is verified against the re-resolved list —
+// if the library changed since the modal opened, the track is re-matched by
+// title rather than firing whatever now sits at that index; if the title is
+// gone entirely the caller gets a stale error (route maps it to 409).
+async function invokeTrackAction(offset, trackIndex, trackTitle, zoneOrOutputId, kind, filter) {
+  const { sessionKey, hierarchy, items, playMenu } = await loadAlbumSession(offset, filter);
+  const trackItems = items.filter(t => isTrackItem(t, playMenu));
+
+  const wanted = normalize(trackTitle || "");
+  let item = trackItems[trackIndex];
+  if (!item || (wanted && normalize(stripTrackNumber(item.title)) !== wanted)) {
+    item = wanted
+      ? trackItems.find(t => normalize(stripTrackNumber(t.title)) === wanted)
+      : null;
+  }
+  if (!item) {
+    const err = new Error("Track list changed — close and reopen the album");
+    err.stale = true;
+    throw err;
+  }
+
+  // Tapping a track opens its own action submenu (Play Now / Add Next /
+  // Queue / Start Radio…) — same drill as the album's Play menu.
+  const actions = await drillActionMenu(hierarchy, sessionKey, item.item_key);
+
+  const action = matchAction(actions, kind);
+  if (!action) {
+    throw new Error("No matching action for '" + kind +
+                    "'. Available: " + actions.map(a => a.title).join(", "));
+  }
+  await browse({
+    hierarchy,
+    item_key:  action.item_key,
+    zone_or_output_id: zoneOrOutputId,
+    multi_session_key: sessionKey
+  });
+  return { invoked: action.title, track: stripTrackNumber(item.title) };
 }
 
 // ---------------------------------------------------------------------------
@@ -5142,6 +5208,27 @@ app.post("/api/play", async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Play or queue a single track of an album.
+// body { offset, track (index into /api/album's tracks), title, zone_or_output_id, kind }
+app.post("/api/play-track", async (req, res) => {
+  if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
+  const { offset, track, title, zone_or_output_id, kind } = req.body || {};
+  const filter = parseFilter(req.body || {});
+  if (!Number.isFinite(offset)) return res.status(400).json({ error: "offset required" });
+  if (!Number.isInteger(track) || track < 0) return res.status(400).json({ error: "track index required" });
+  if (!zone_or_output_id)       return res.status(400).json({ error: "zone_or_output_id required" });
+  if (kind !== "play_now" && kind !== "queue" && kind !== "play_next") {
+    return res.status(400).json({ error: "kind must be play_now, queue or play_next" });
+  }
+  try {
+    const r = await invokeTrackAction(offset, track, title || "", zone_or_output_id, kind, filter);
+    res.json({ ok: true, action: r.invoked, track: r.track });
+  } catch (e) {
+    // stale = the modal's track list no longer matches the library
+    res.status(e.stale ? 409 : 500).json({ error: e.message });
   }
 });
 

@@ -2650,7 +2650,8 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 /*  3. softer hairline track separators tuned for tinted panels,       */
 /*  4. the np-mode Queue tab as the same panel (queue motif + glow),   */
 /*  5. the Now playing screen as an amber panel (equaliser motif) with  */
-/*     the glow now on in every modal state.                            */
+/*     the glow now on in every modal state,                            */
+/*  6. tappable track rows with per-track Play now / Queue actions.     */
 /*  Deliberately quiet: low opacities, existing Home tint variables.   */
 /* ------------------------------------------------------------------ */
 
@@ -2746,6 +2747,35 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 .np-panel .np-btn:not(.np-playpause):hover { background: rgba(255,255,255,.07); }
 [data-theme="light"] .np-panel .np-btn:not(.np-playpause):hover { background: rgba(26,39,64,.07); }
 .np-panel .np-btn:disabled:hover { background: transparent; }
+
+/* 6 — Selectable tracks (v1.6.10): each row in the Tracks panel expands on
+   tap to reveal Play now / Queue for that single track. Hover/selection
+   washes are translucent to sit on the tinted panel. The buttons ARE
+   .action-btn (shared recipe: colors, primary, hover, disabled) with a
+   row-scale override — flex:none undoes .action-btn's stretch-to-fill,
+   and min-height keeps the tap target at the app's 38-40px norm. */
+.track-list li.t-row { cursor: pointer; transition: background .12s ease; }
+.track-list li.t-row:hover { background: rgba(255,255,255,.04); }
+.track-list li.t-row.is-open {
+  background: rgba(255,255,255,.05);
+  border-radius: 10px;
+  border-bottom-color: transparent;
+  flex-wrap: wrap;
+  padding-left: 8px; padding-right: 8px;
+}
+[data-theme="light"] .track-list li.t-row:hover { background: rgba(26,39,64,.05); }
+[data-theme="light"] .track-list li.t-row.is-open { background: rgba(26,39,64,.06); }
+.t-actions {
+  flex-basis: 100%;
+  display: flex; gap: 8px;
+  padding: 8px 0 6px 34px;   /* clears the 22px number column + 12px gap */
+}
+.t-actions .action-btn {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 9px 18px;
+  font-size: 12.5px; font-weight: 600;
+}
 
 /* Queue rows: the same translucent hairlines as the Tracks panel, replacing
    the solid --border that fights the tint. The id selector (1,1,1) outguns
