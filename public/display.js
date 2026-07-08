@@ -195,7 +195,9 @@
       const extras = [];
       for (const u of (j.artistPhotos || []).slice(0, 4)) extras.push({ kind: "photo", url: u });
       if (j.review && j.review.text) extras.push({ kind: "review", review: j.review });
-      if (j.video && j.video.embedUrl) extras.push({ kind: "video", embedUrl: j.video.embedUrl });
+      if (j.video && j.video.videoId && !deadVideos.has(j.video.videoId)) {
+        extras.push({ kind: "video", videoId: j.video.videoId, embedUrl: j.video.embedUrl });
+      }
       if (!extras.length) return;
       slides = base.concat(extras);
       if (!base.length) { slideIdx = -1; nextSlide(); }   // no art: first visual is an extra
@@ -235,14 +237,62 @@
     if (s.kind === "video") {
       const wrap = document.createElement("div");
       wrap.className = "video-wrap";
-      const f = document.createElement("iframe");
-      f.src = s.embedUrl;
-      f.allow = "autoplay; encrypted-media";
-      f.title = "Video clip (muted)";
-      wrap.appendChild(f);
+      // The IFrame Player API (not a bare iframe) so embed failures are
+      // DETECTED: the server verifies status.embeddable, but region blocks
+      // and takedowns still slip through and would sit on screen as a
+      // "Video unavailable" card. onError drops the video from rotation.
+      const holder = document.createElement("div");
+      wrap.appendChild(holder);
+      ensureYT().then((YT) => {
+        if (!wrap.isConnected) return;   // slide already rotated away
+        const player = new YT.Player(holder, {
+          videoId: s.videoId,
+          host: "https://www.youtube-nocookie.com",
+          playerVars: { autoplay: 1, mute: 1, controls: 0, modestbranding: 1,
+                        playsinline: 1, rel: 0, loop: 1, playlist: s.videoId },
+          events: {
+            onReady: (e) => { try { e.target.mute(); e.target.playVideo(); } catch (_) {} },
+            onError: () => dropVideo(s.videoId)
+          }
+        });
+        wrap._ytPlayer = player;
+      }).catch(() => dropVideo(s.videoId));
       return { node: wrap, full: false };
     }
     return { node: el, full: false };
+  }
+
+  // Load the YouTube IFrame API once, on first use.
+  let ytPromise = null;
+  function ensureYT() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    if (ytPromise) return ytPromise;
+    ytPromise = new Promise((resolve, reject) => {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (typeof prev === "function") { try { prev(); } catch (_) {} }
+        resolve(window.YT);
+      };
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      tag.onerror = () => reject(new Error("YT API load failed"));
+      document.head.appendChild(tag);
+      setTimeout(() => reject(new Error("YT API timeout")), 10000);
+    });
+    return ytPromise;
+  }
+
+  // A video that can't actually play (region block, takedown) leaves the
+  // rotation for good; if it's on screen right now, advance immediately.
+  const deadVideos = new Set();
+  function dropVideo(videoId) {
+    deadVideos.add(videoId);
+    const wasVisible = slides[slideIdx] && slides[slideIdx].kind === "video";
+    const before = slideIdx;
+    slides = slides.filter(s => !(s.kind === "video" && s.videoId === videoId));
+    if (slideIdx >= slides.length) slideIdx = slides.length - 1;
+    if (wasVisible && slides.length) { slideIdx = Math.max(-1, before - 1); nextSlide(); }
+    if (slides.length <= 1) stopRotation();
   }
 
   function nextSlide() {
@@ -259,7 +309,14 @@
     back.classList.add("visible");
     front.classList.remove("visible");
     frontIsA = !frontIsA;
-    setTimeout(() => { if (!front.classList.contains("visible")) front.innerHTML = ""; }, 1200);
+    setTimeout(() => {
+      if (front.classList.contains("visible")) return;
+      // Tear down any YT player cleanly before dropping its DOM.
+      front.querySelectorAll(".video-wrap").forEach(w => {
+        if (w._ytPlayer) { try { w._ytPlayer.destroy(); } catch (_) {} }
+      });
+      front.innerHTML = "";
+    }, 1200);
   }
 
   function startRotation() {

@@ -5256,6 +5256,11 @@ async function fetchArtistPhotos(artistName) {
 
 // Muted video clip via the YouTube Data API — only when the user supplied a
 // key in Settings. Cached per artist+track; failures cache null.
+// The search API's videoEmbeddable filter is unreliable (music labels often
+// disable third-party embedding and search still returns those videos, which
+// then render as "Video unavailable" in the iframe) — so the top results are
+// verified against videos.list's status.embeddable flag and the first video
+// that genuinely allows embedding wins.
 const displayVideoCache = new Map();
 async function fetchDisplayVideo(artistName, trackName) {
   if (!youtubeKey || !artistName || !trackName) return null;
@@ -5264,18 +5269,30 @@ async function fetchDisplayVideo(artistName, trackName) {
   let video = null;
   try {
     const q = `${artistName} ${trackName} official video`;
-    const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video" +
-      "&videoEmbeddable=true&maxResults=1&q=" + encodeURIComponent(q) +
+    const searchUrl = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video" +
+      "&videoEmbeddable=true&videoSyndicated=true&maxResults=5&q=" + encodeURIComponent(q) +
       "&key=" + encodeURIComponent(youtubeKey);
-    const json = await httpJson(url);
-    const id = json && json.items && json.items[0] &&
-               json.items[0].id && json.items[0].id.videoId;
-    if (id) {
-      video = {
-        embedUrl: "https://www.youtube-nocookie.com/embed/" + id +
-          "?autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0" +
-          "&loop=1&playlist=" + id
-      };
+    const json = await httpJson(searchUrl);
+    const ids = ((json && json.items) || [])
+      .map(it => it && it.id && it.id.videoId)
+      .filter(Boolean);
+    if (ids.length) {
+      const statusUrl = "https://www.googleapis.com/youtube/v3/videos?part=status" +
+        "&id=" + encodeURIComponent(ids.join(",")) +
+        "&key=" + encodeURIComponent(youtubeKey);
+      const st = await httpJson(statusUrl);
+      const okIds = new Set(((st && st.items) || [])
+        .filter(v => v && v.status && v.status.embeddable && v.status.privacyStatus === "public")
+        .map(v => v.id));
+      const id = ids.find(i => okIds.has(i));   // keep search's relevance order
+      if (id) {
+        video = {
+          videoId: id,
+          embedUrl: "https://www.youtube-nocookie.com/embed/" + id +
+            "?autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0" +
+            "&loop=1&playlist=" + id + "&enablejsapi=1"
+        };
+      }
     }
   } catch (e) {
     if (DEBUG) console.error("[display:youtube]", e.message);

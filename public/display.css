@@ -17,6 +17,19 @@ html, body {
   cursor: none;                       /* kiosk: hide the pointer */
   -webkit-font-smoothing: antialiased;
 }
+/* The page must NEVER scroll or rubber-band (iOS Safari ignores plain
+   overflow:hidden for touch drags): pin the body to the visual viewport and
+   swallow touch panning. Everything inside is position:fixed anyway, and the
+   bottom bar's safe-area padding keeps it on screen above the home indicator. */
+body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
 
 /* Blurred cover backdrop behind everything (fed a small image; upscale blurs) */
 .backdrop {

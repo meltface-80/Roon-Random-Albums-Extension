@@ -2,6 +2,12 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.18] — 2026-07-08
+
+### Fixed
+- **Wall display: video clips now actually play.** Videos were found but rendered as YouTube's "Video unavailable — Watch on YouTube" card: the search API's embeddable filter is unreliable, and many music videos block third-party embedding. The server now verifies the top 5 results against YouTube's `status.embeddable` flag and picks the first video that genuinely allows embedding; the page also switched to the YouTube IFrame Player API so any failure that still slips through (region blocks, takedowns) is detected and the video is dropped from the rotation — album art returns instead of an error card sitting on screen.
+- **Wall display never scrolls and the progress strip always stays on screen** — the page body is pinned to the visual viewport with touch panning disabled (iOS Safari ignores plain `overflow:hidden` for touch drags), so nothing can rubber-band the bar out of view on phones.
+
 ## [1.6.17] — 2026-07-08
 
 ### Added
