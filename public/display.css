@@ -87,6 +87,39 @@ body {
 .review-card .review-attrib {
   margin-top: 16px; font-size: 13px; color: #8a9099;
 }
+/* "More from <artist>" / "More on <label>" cover-grid slide */
+.more-card {
+  /* Sized so 2 rows of 4 covers + titles + heading fit inside the slide even
+     on short screens (the width drives the cover size via the 1fr columns). */
+  max-width: min(820px, 86vw, 118vh);
+  max-height: 74vh;
+  overflow: hidden;
+  text-align: center;
+}
+.more-card h2 { font-size: clamp(22px, 2.8vw, 32px); font-weight: 700; }
+.more-sub { font-size: 14px; color: #8a9099; margin: 6px 0 22px; }
+.more-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+.more-cell img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+.more-title {
+  margin-top: 8px;
+  font-size: 13px; color: #c3c8ce;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+@media (max-width: 700px) {
+  .more-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .more-cell:nth-child(n+7) { display: none; }   /* 2 rows of 3 on phones */
+}
+
 /* Video slide — muted, no controls; sized like the art */
 .slide .video-wrap {
   width: min(120vh, 88vw);

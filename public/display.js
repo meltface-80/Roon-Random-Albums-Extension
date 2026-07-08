@@ -195,6 +195,16 @@
       const extras = [];
       for (const u of (j.artistPhotos || []).slice(0, 4)) extras.push({ kind: "photo", url: u });
       if (j.review && j.review.text) extras.push({ kind: "review", review: j.review });
+      if (j.bio && j.bio.text) extras.push({ kind: "bio", bio: j.bio });
+      const more = j.moreAlbums || {};
+      if (more.artist && more.artist.albums && more.artist.albums.length) {
+        extras.push({ kind: "more", heading: "More from " + more.artist.name,
+                      sub: "From your library", albums: more.artist.albums });
+      }
+      if (more.label && more.label.albums && more.label.albums.length) {
+        extras.push({ kind: "more", heading: "More on " + more.label.name,
+                      sub: "From your library", albums: more.label.albums });
+      }
       if (j.video && j.video.videoId && !deadVideos.has(j.video.videoId)) {
         extras.push({ kind: "video", videoId: j.video.videoId, embedUrl: j.video.embedUrl });
       }
@@ -220,18 +230,49 @@
       img.src = s.url;
       return { node: img, full: true };
     }
-    if (s.kind === "review") {
+    if (s.kind === "review" || s.kind === "bio") {
+      const src = s.kind === "bio" ? s.bio : s.review;
       const card = document.createElement("div");
       card.className = "review-card";
       const h = document.createElement("h2");
-      h.textContent = np ? (np.line3 || np.line1 || "") : "";
+      h.textContent = s.kind === "bio"
+        ? (src.name || (np && np.line2) || "")
+        : (np ? (np.line3 || np.line1 || "") : "");
       const p = document.createElement("div");
       p.className = "review-text";
-      p.textContent = s.review.text;
+      p.textContent = src.text;
       const a = document.createElement("div");
       a.className = "review-attrib";
-      a.textContent = s.review.attribution || "";
+      a.textContent = src.attribution || "";
       card.append(h, p, a);
+      return { node: card, full: false };
+    }
+    if (s.kind === "more") {
+      const card = document.createElement("div");
+      card.className = "more-card";
+      const h = document.createElement("h2");
+      h.textContent = s.heading;
+      const sub = document.createElement("div");
+      sub.className = "more-sub";
+      sub.textContent = s.sub || "";
+      const grid = document.createElement("div");
+      grid.className = "more-grid";
+      for (const al of s.albums.slice(0, 8)) {
+        const cell = document.createElement("div");
+        cell.className = "more-cell";
+        if (al.image_key) {
+          const img = document.createElement("img");
+          img.alt = ""; img.loading = "lazy";
+          img.src = "/api/image/" + encodeURIComponent(al.image_key) + "?size=300";
+          cell.appendChild(img);
+        }
+        const t = document.createElement("div");
+        t.className = "more-title";
+        t.textContent = al.title;
+        cell.appendChild(t);
+        grid.appendChild(cell);
+      }
+      card.append(h, sub, grid);
       return { node: card, full: false };
     }
     if (s.kind === "video") {

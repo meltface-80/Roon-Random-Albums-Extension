@@ -2,6 +2,15 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.19] — 2026-07-08
+
+### Changed
+- **Wall display videos: official music video or official live performance — or nothing.** Candidates are now scored precision-first: the channel must be the artist's own (or their VEVO); "official (music) video" titles score highest; live versions are accepted only from the artist's own channel. Hard-rejected outright: " - Topic" auto-uploads (static album art with audio — pointless muted), lyric videos, visualizers, covers, reactions, remixes, karaoke, chat-show/fan uploads, and any title missing the track name. Survivors are verified playable (embeddable, public, not age-restricted — age-restricted never plays embedded) with view count as tiebreak. A wrong video no longer beats no video.
+
+### Added
+- **Wall display: artist bio card** — the artist's Wikipedia biography is now its own rotation slide (the review card keeps the album text).
+- **Wall display: "More from <artist>" and "More on <label>" slides** — cover grids drawn instantly from your own library (album index + labels index, no API keys): other albums by the playing artist, and label-mates of the playing album. Only shown when there are at least 3 to show.
+
 ## [1.6.18] — 2026-07-08
 
 ### Fixed

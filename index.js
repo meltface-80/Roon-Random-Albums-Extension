@@ -5255,42 +5255,77 @@ async function fetchArtistPhotos(artistName) {
 }
 
 // Muted video clip via the YouTube Data API — only when the user supplied a
-// key in Settings. Cached per artist+track; failures cache null.
-// The search API's videoEmbeddable filter is unreliable (music labels often
-// disable third-party embedding and search still returns those videos, which
-// then render as "Video unavailable" in the iframe) — so the top results are
-// verified against videos.list's status.embeddable flag and the first video
-// that genuinely allows embedding wins.
+// key in Settings. PRECISION-FIRST: the display shows the artist's official
+// music video or an official live performance, or NOTHING — never chat-show
+// clips, fan uploads, or " - Topic" auto-uploads (those are static album art
+// with audio: worthless on a muted screen). Candidates are scored on channel
+// ownership + title keywords and must clear a threshold; the survivors are
+// verified via videos.list (embeddable, public, not age-restricted — age
+// restriction never plays embedded). Cached per artist+track incl. negatives
+// (search.list costs 100 quota units of the 10k/day default).
 const displayVideoCache = new Map();
+function scoreDisplayVideo(item, artistN, trackTokens) {
+  const title    = (item.snippet && item.snippet.title        || "");
+  const channel  = (item.snippet && item.snippet.channelTitle || "");
+  const titleN   = normalize(title);
+  const channelN = normalize(channel);
+  // Hard rejects: auto-generated audio uploads and non-video content.
+  if (/ - topic$/i.test(channel)) return -1;
+  if (/\b(audio|lyric|lyrics|visuali[sz]er|cover|reaction|remix|sped|slowed|8d|karaoke|instrumental|full album)\b/i.test(title)) return -1;
+  // Every significant token of the track name must appear in the video title.
+  for (const t of trackTokens) if (titleN.indexOf(t) === -1) return -1;
+  let score = 0;
+  const channelIsArtist = channelN === artistN || channelN === artistN + " vevo" ||
+                          channelN.replace(/\s+/g, "") === artistN.replace(/\s+/g, "") + "vevo";
+  if (channelIsArtist) score += 45;
+  else if (channelN.indexOf(artistN) !== -1) score += 25;
+  else score -= 40;                                       // kills chat shows / fan uploads
+  if (/\bofficial (music )?video\b/i.test(title)) score += 30;
+  else if (/\(official\b/i.test(title)) score += 20;
+  if (/\blive\b/i.test(title)) {
+    if (score >= 45) score += 25;                         // live on the artist's own channel — welcome
+    else return -1;                                       // random live bootleg — reject
+  }
+  return score;
+}
 async function fetchDisplayVideo(artistName, trackName) {
   if (!youtubeKey || !artistName || !trackName) return null;
   const key = normalize(artistName) + "||" + normalize(trackName);
   if (displayVideoCache.has(key)) return displayVideoCache.get(key);
   let video = null;
   try {
-    const q = `${artistName} ${trackName} official video`;
+    const q = `${artistName} ${trackName} official`;
     const searchUrl = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video" +
-      "&videoEmbeddable=true&videoSyndicated=true&maxResults=5&q=" + encodeURIComponent(q) +
-      "&key=" + encodeURIComponent(youtubeKey);
+      "&videoCategoryId=10&videoEmbeddable=true&videoSyndicated=true&maxResults=10" +
+      "&q=" + encodeURIComponent(q) + "&key=" + encodeURIComponent(youtubeKey);
     const json = await httpJson(searchUrl);
-    const ids = ((json && json.items) || [])
-      .map(it => it && it.id && it.id.videoId)
-      .filter(Boolean);
-    if (ids.length) {
-      const statusUrl = "https://www.googleapis.com/youtube/v3/videos?part=status" +
-        "&id=" + encodeURIComponent(ids.join(",")) +
+    const artistN = normalize(artistName);
+    const trackTokens = normalize(trackName).split(" ").filter(t => t.length > 2);
+    const scored = ((json && json.items) || [])
+      .filter(it => it && it.id && it.id.videoId && it.snippet)
+      .map(it => ({ id: it.id.videoId, score: scoreDisplayVideo(it, artistN, trackTokens) }))
+      .filter(c => c.score >= 70)
+      .sort((a, b) => b.score - a.score);
+    if (scored.length) {
+      const statusUrl = "https://www.googleapis.com/youtube/v3/videos?part=status,contentDetails,statistics" +
+        "&id=" + encodeURIComponent(scored.map(c => c.id).join(",")) +
         "&key=" + encodeURIComponent(youtubeKey);
       const st = await httpJson(statusUrl);
-      const okIds = new Set(((st && st.items) || [])
-        .filter(v => v && v.status && v.status.embeddable && v.status.privacyStatus === "public")
-        .map(v => v.id));
-      const id = ids.find(i => okIds.has(i));   // keep search's relevance order
-      if (id) {
+      const playable = new Map(((st && st.items) || [])
+        .filter(v => v && v.status && v.status.embeddable && v.status.privacyStatus === "public" &&
+                     !(v.contentDetails && v.contentDetails.contentRating &&
+                       v.contentDetails.contentRating.ytRating === "ytAgeRestricted"))
+        .map(v => [v.id, parseInt((v.statistics && v.statistics.viewCount) || "0", 10)]));
+      // Highest score wins; view count breaks ties between equal scores.
+      const best = scored
+        .filter(c => playable.has(c.id))
+        .sort((a, b) => (b.score - a.score) || (playable.get(b.id) - playable.get(a.id)))[0];
+      if (best) {
         video = {
-          videoId: id,
-          embedUrl: "https://www.youtube-nocookie.com/embed/" + id +
+          videoId: best.id,
+          embedUrl: "https://www.youtube-nocookie.com/embed/" + best.id +
             "?autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0" +
-            "&loop=1&playlist=" + id + "&enablejsapi=1"
+            "&loop=1&playlist=" + best.id + "&enablejsapi=1"
         };
       }
     }
@@ -5329,16 +5364,52 @@ app.get("/api/display/content", async (req, res) => {
     ]);
     // Review card: the album description when a displayable one exists
     // (Qobuz/Wikipedia — fetchAlbumBios nulls Pitchfork text for UK-law
-    // compliance), else the artist's Wikipedia bio.
+    // compliance). The artist's Wikipedia bio is its own separate slide.
     let review = null;
     if (bios && bios.album && bios.album.description) {
       review = { text: bios.album.description,
                  attribution: "About this album — " + (bios.album.source || "") };
-    } else if (bios && bios.artist && bios.artist.description) {
-      review = { text: bios.artist.description,
-                 attribution: "About " + (bios.artist.name || primaryArtist) + " — " + (bios.artist.source || "Wikipedia") };
     }
-    const data = { artistPhotos: photos, review, video };
+    let bio = null;
+    if (bios && bios.artist && bios.artist.description) {
+      bio = { name: bios.artist.name || primaryArtist,
+              text: bios.artist.description,
+              attribution: "About " + (bios.artist.name || primaryArtist) + " — " + (bios.artist.source || "Wikipedia") };
+    }
+    // Library recommendations — instant, no API keys: other albums by this
+    // artist from the in-memory album index, and label-mates from the labels
+    // index. Both use the same tile shape the display renders as cover grids.
+    const npTitleN = normalize(album);
+    const artistN  = normalize(primaryArtist);
+    const moreArtist = [];
+    if (artistN) {
+      for (const al of albumIndex.albums) {
+        if (moreArtist.length >= 12) break;
+        if (normalize(al.title) === npTitleN) continue;
+        const subN = normalize(al.subtitle || "");
+        if (subN === artistN || subN.split(" / ").indexOf(artistN) !== -1 ||
+            subN.startsWith(artistN + " /") || subN.indexOf(" / " + artistN) !== -1) {
+          moreArtist.push({ title: al.title || "", subtitle: al.subtitle || "", image_key: al.image_key || null });
+        }
+      }
+    }
+    let moreLabel = null;
+    const labelName = labelDiskCache.get(npTitleN + "||" + normalize(artist));
+    if (labelName) {
+      const entry = labelsIndex.map.get(labelGroupKey(labelName));
+      if (entry && entry.albums && entry.albums.length >= 4) {
+        const picks = entry.albums.filter(a => normalize(a.title) !== npTitleN).slice(0, 12)
+          .map(a => ({ title: a.title || "", subtitle: a.subtitle || "", image_key: a.image_key || null }));
+        if (picks.length >= 3) moreLabel = { name: entry.display || labelName, albums: picks };
+      }
+    }
+    const data = {
+      artistPhotos: photos, review, bio, video,
+      moreAlbums: {
+        artist: moreArtist.length >= 3 ? { name: primaryArtist, albums: moreArtist } : null,
+        label:  moreLabel
+      }
+    };
     displayContentCache.delete(cacheKey);   // re-set moves the key to newest position
     displayContentCache.set(cacheKey, { at: Date.now(), data });
     if (displayContentCache.size > 200) {
