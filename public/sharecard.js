@@ -59,31 +59,50 @@ const ShareCard = (() => {
     });
   }
 
+  // Word-wrap text to maxWidth. Returns { lines, overflow } — overflow is true
+  // when the text didn't fully fit in maxLines (or a single word is wider than
+  // the column). Ellipsis is NOT applied here: fitText() first tries smaller
+  // font sizes and only ellipsizes as the final fallback.
   function wrapText(ctx, text, maxWidth, maxLines) {
-    if (!text) return [];
+    if (!text) return { lines: [], overflow: false };
     const words = String(text).split(/\s+/);
     const lines = [];
     let cur = '';
+    let overflow = false;
     for (const w of words) {
       const candidate = cur ? cur + ' ' + w : w;
       if (ctx.measureText(candidate).width <= maxWidth) {
         cur = candidate;
       } else {
         if (cur) lines.push(cur);
-        if (lines.length >= maxLines) { cur = ''; break; }
+        if (lines.length >= maxLines) { cur = ''; overflow = true; break; }
         cur = w;
+        if (ctx.measureText(w).width > maxWidth) overflow = true;  // single over-wide word
       }
     }
     if (cur && lines.length < maxLines) lines.push(cur);
-    if (lines.length === maxLines) {
-      let last = lines[maxLines - 1];
-      const joined = lines.join(' ');
-      if (joined.length < String(text).length) {
-        while (last.length && ctx.measureText(last + '…').width > maxWidth) last = last.slice(0, -1);
-        lines[maxLines - 1] = last.replace(/\s+$/, '') + '…';
-      }
+    else if (cur) overflow = true;
+    return { lines, overflow };
+  }
+
+  // Fit text into maxLines within maxWidth by stepping the font size down until
+  // it fits; only when even the smallest size overflows is the last line
+  // ellipsized. Returns { lines, size, lh } for the chosen size.
+  function fitText(ctx, text, maxWidth, maxLines, weight, sizes, lhRatio) {
+    let r = null, size = sizes[0];
+    for (const s of sizes) {
+      size = s;
+      ctx.font = `${weight} ${s}px "Manrope", sans-serif`;
+      r = wrapText(ctx, text, maxWidth, maxLines);
+      if (!r.overflow) break;
     }
-    return lines;
+    if (r.overflow && r.lines.length) {
+      // Final fallback at the smallest size: trim the last line to an ellipsis.
+      let last = r.lines[r.lines.length - 1];
+      while (last.length && ctx.measureText(last + '…').width > maxWidth) last = last.slice(0, -1);
+      r.lines[r.lines.length - 1] = last.replace(/\s+$/, '') + '…';
+    }
+    return { lines: r.lines, size, lh: Math.round(size * lhRatio) };
   }
 
   async function render(data) {
@@ -129,17 +148,15 @@ const ShareCard = (() => {
     const META_H     = META_SIZE + 4;
     const META_GAP   = 24;   // gap below the year line
 
-    const TITLE_SIZE = 56;
-    const TITLE_LH   = 68;
-    ctx.font = `700 ${TITLE_SIZE}px "Manrope", sans-serif`;
-    const titleLines = wrapText(ctx, data.title || '', TEXT_W, 3);
-    const titleH = titleLines.length * TITLE_LH;
+    // Title and artist are adaptive: up to 4 lines each, stepping the font size
+    // down until the text fits (56→36px title, 37→24px artist); only when even
+    // the smallest size overflows is the last line ellipsized. Worst case
+    // (meta + 4 title lines @36 + 4 artist lines @24 ≈ 426px) fits the 600px card.
+    const title  = fitText(ctx, data.title || '', TEXT_W, 4, 700, [56, 48, 42, 36, 31, 27], 68 / 56);
+    const titleH = title.lines.length * title.lh;
 
-    const ARTIST_SIZE = 37;
-    const ARTIST_LH   = 48;
-    ctx.font = `400 ${ARTIST_SIZE}px "Manrope", sans-serif`;
-    const artistLines = wrapText(ctx, 'by ' + (data.artist || ''), TEXT_W, 2);
-    const artistH = artistLines.length * ARTIST_LH;
+    const artist  = fitText(ctx, 'by ' + (data.artist || ''), TEXT_W, 4, 400, [37, 32, 28, 24, 21], 48 / 37);
+    const artistH = artist.lines.length * artist.lh;
 
     const BLOCK_GAP  = 18;   // gap between title and artist
 
@@ -161,14 +178,14 @@ const ShareCard = (() => {
 
     // --- Album title ---
     ctx.fillStyle = '#ffffff';
-    ctx.font = `700 ${TITLE_SIZE}px "Manrope", sans-serif`;
-    titleLines.forEach((line, i) => ctx.fillText(line, TEXT_X, ry + i * TITLE_LH));
+    ctx.font = `700 ${title.size}px "Manrope", sans-serif`;
+    title.lines.forEach((line, i) => ctx.fillText(line, TEXT_X, ry + i * title.lh));
     ry += titleH + BLOCK_GAP;
 
     // --- Artist ---
     ctx.fillStyle = '#c0c6cc';
-    ctx.font = `400 ${ARTIST_SIZE}px "Manrope", sans-serif`;
-    artistLines.forEach((line, i) => ctx.fillText(line, TEXT_X, ry + i * ARTIST_LH));
+    ctx.font = `400 ${artist.size}px "Manrope", sans-serif`;
+    artist.lines.forEach((line, i) => ctx.fillText(line, TEXT_X, ry + i * artist.lh));
 
     // --- Wordmark pinned bottom-right (only if a wordmark image was supplied) ---
     if (wm) {

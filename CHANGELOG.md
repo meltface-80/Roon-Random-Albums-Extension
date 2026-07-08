@@ -2,6 +2,36 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.15] — 2026-07-08
+
+### Changed — performance pass (the UI had grown sluggish since the Home redesign)
+
+Server:
+- **Cover art is now cached in memory on the server** (64 MB LRU) and served with long immutable browser-cache headers. Previously every art request — ~85 per Home render — was a live round-trip through the single Roon websocket, with the Core rescaling each image on demand; that connection also carries all browse/transport traffic, so everything queued behind everything else.
+- **The album index no longer rebuilds on nearly every Home visit.** Its staleness window was 10 minutes, so most visits kicked off a full library re-walk that competed with the very render it was serving. It's now a 6-hour safety net — the existing 5-minute count probe still rebuilds promptly when the library is actually edited.
+- **Random albums are picked from the in-memory index** (unfiltered requests): removes ~6 Roon browse round-trips + 30 single-item loads from every Home visit and wall refresh. Genre/tag/label-filtered picks still use live browse.
+- **Responses are gzip-compressed** (app.js ~75% smaller on the wire). The app's html/js/css deliberately stay revalidate-on-load (cheap ETag 304s) so a new build shows up immediately after an upgrade — no stale-app hard-refresh dance.
+
+Web UI:
+- **Home keeps its rows for 5 minutes.** Every Back tap used to rebuild the unplayed + random rows with a fresh random set — ~60 new cover fetches each time. Within the window the existing tiles (and the browser's image cache) are reused; after it they refresh as before.
+- **Backdrop blur removed from the bars that float over the scrolling page** (mini transport, filter bar, label-merge bar) — iOS Safari re-blurs everything beneath them on every scroll frame; they're now solid. This was the main scroll-jank source while music was playing.
+- **The album view's ambient glow uses a tiny 96px cover** instead of the 800px art (upscaling does the smoothing) — a fraction of the blurred-layer cost during modal scrolling.
+- **Tile art is sized to the screen** (devicePixelRatio-aware) instead of always 500px — iPads/desktops were fetching ~2.8× more pixels than they display.
+- **The 1.5s transport poll only touches the DOM and localStorage when something actually changed** (track/state/volume signature) instead of rewriting the bar every tick.
+- **Below-the-fold Home sections (label of the week, genres) skip rendering until scrolled near** (`content-visibility: auto`).
+- Album-of-the-day and the unplayed list now load in parallel instead of one after the other.
+
+### Not changed
+- **No rewrite needed:** profiling showed Node CPU is essentially idle — the time went to Roon Core round-trips, image bytes, and browser paint. A Rust port would wait on the same websocket at the same speed; the wins above are architectural and language-independent.
+
+## [1.6.14] — 2026-07-07
+
+### Fixed
+- **Landscape Now playing on tablets and desktops** — broken by the v1.6.13 layout change: at ≥720px the modal panel is a centred auto-height dialog, so the height-driven artwork had nothing to size against and collapsed to zero — the screen shrank to a small floating box with no album art. Now playing is now a full-screen view at every size (Roon parity), and landscape tablets/desktops get a proper two-pane layout: tabs centred on top, big album art on the left, track/seek/transport on the right. Verified headlessly at 1400×900, 1080×810 (tablet landscape), 810×1080 (tablet portrait), 390×844 (phone), and short desktop windows (1100×640, 1100×460 — art shrinks, nothing scrolls or clips).
+
+### Changed
+- **The share card adapts to long album titles and long artist lists.** Title and artist each wrap onto up to 4 lines (was 3 and 2), and the text automatically steps down in size (title 56→27px, artist 37→21px) until it fits — an ellipsis only appears when even the smallest size can't hold it. King Gizzard's full 127-character "PetroDragonic Apocalypse…" title and five-artist credit lists now render complete on the card.
+
 ## [1.6.13] — 2026-07-07
 
 ### Changed
