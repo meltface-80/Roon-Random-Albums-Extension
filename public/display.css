@@ -1,0 +1,126 @@
+/*
+ * display.css — the /display wall screen.
+ * Copyright (c) 2026 Lewis Menzies (Music Duck / MusicD)
+ * Released under the MIT License. See the LICENSE file for details.
+ *
+ * Always dark (it's a wall display), no interactive chrome. The bottom strip
+ * mirrors the Nest-Hub look: title, artist, elapsed · thin bar · total.
+ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #f2f3f5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  cursor: none;                       /* kiosk: hide the pointer */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Blurred cover backdrop behind everything (fed a small image; upscale blurs) */
+.backdrop {
+  position: fixed; inset: -6%;
+  width: 112%; height: 112%;
+  object-fit: cover;
+  filter: blur(18px) brightness(.45) saturate(1.1);
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+.backdrop.visible { opacity: 1; }
+
+/* Rotating stage: two stacked layers crossfade */
+.stage { position: fixed; inset: 0; }
+.slide {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity .9s ease;
+  padding: 4vh 4vw 14vh;              /* keep clear of the bottom strip */
+}
+.slide.visible { opacity: 1; }
+
+/* Album art slide */
+.slide img.art {
+  max-width: min(72vh, 88vw);
+  max-height: 72vh;
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6);
+}
+/* Artist photo slide — full-bleed */
+.slide.full { padding: 0; }
+.slide img.photo {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+/* Review card slide */
+.review-card {
+  max-width: min(880px, 88vw);
+  max-height: 70vh;
+  overflow: hidden;
+  background: rgba(10,12,14,.72);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 16px;
+  padding: 34px 38px;
+  backdrop-filter: blur(6px);          /* static while shown — cheap */
+  -webkit-backdrop-filter: blur(6px);
+}
+.review-card h2 { font-size: 26px; font-weight: 700; margin-bottom: 14px; }
+.review-card .review-text {
+  font-size: 19px; line-height: 1.55; color: #d9dde2;
+  display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 10; overflow: hidden;
+}
+.review-card .review-attrib {
+  margin-top: 16px; font-size: 13px; color: #8a9099;
+}
+/* Video slide — muted, no controls; sized like the art */
+.slide .video-wrap {
+  width: min(120vh, 88vw);
+  aspect-ratio: 16 / 9;
+  max-height: 72vh;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  background: #000;
+}
+.slide .video-wrap iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
+
+/* Idle / off messages */
+.center-msg {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center;
+}
+.center-msg.hidden { display: none; }
+.idle-title { font-size: clamp(26px, 4vw, 44px); font-weight: 700; color: #aeb4bb; }
+.idle-sub   { font-size: clamp(14px, 1.8vw, 20px); color: #62686f; }
+
+/* Bottom strip */
+.bottombar {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  padding: 18px max(28px, env(safe-area-inset-left)) calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(0,0,0,.78) 0%, rgba(0,0,0,.45) 65%, transparent 100%);
+}
+.bottombar.hidden { display: none; }
+.bb-title  { font-size: clamp(18px, 2.6vw, 30px); font-weight: 700; }
+.bb-artist { font-size: clamp(13px, 1.8vw, 19px); color: #b9bfc6; margin-top: 2px; }
+.bb-title, .bb-artist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bb-progress-row {
+  display: flex; align-items: center; gap: 14px;
+  margin-top: 12px;
+}
+.bb-time { font-size: 12px; color: #9aa0a7; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.bb-track {
+  flex: 1 1 auto; height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,.18);
+  overflow: hidden;
+}
+.bb-fill {
+  height: 100%; width: 0%;
+  border-radius: 2px;
+  background: #f2f3f5;
+  transition: width .25s linear;
+}
+
+.hidden { display: none !important; }

@@ -855,6 +855,16 @@ let fanartKey    = _persisted.fanartKey    || "";
 // 0 = off (use the file's label tag, the default). Immune to disc subfolders
 // because it's measured from the music root, not the audio folder.
 let labelFolderDepth = parseInt(_persisted.labelFolderDepth, 10) || 0;
+// Wall display (/display): off by default — when off the page fetches nothing
+// and the content endpoint refuses, so no discovery work happens at all.
+let displayEnabled = _persisted.displayEnabled === true;
+let displaySeconds = (() => {
+  const s = parseInt(_persisted.displaySeconds, 10);
+  return Number.isFinite(s) && s >= 5 && s <= 60 ? s : 10;
+})();
+// Optional YouTube Data API key — enables the display's muted video-clip
+// slides. Without it, video is simply omitted from the rotation.
+let youtubeKey = _persisted.youtubeKey || "";
 
 // Short-lived cache of a streaming service's favourited album ids, shared by
 // all of that service's browse routes so each page render doesn't re-fetch the
@@ -5187,6 +5197,174 @@ app.get("/api/album/extras", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Wall display (/display) — a Roon-style always-on screen that rotates
+// between album art, artist photos (fanart.tv), a review card (the same
+// legally-safe Qobuz/Wikipedia text the album modal shows — Pitchfork text
+// stays suppressed) and a muted video clip (YouTube, only when the user has
+// configured an API key). Everything is gated on the Settings toggle: when
+// off, the content endpoint refuses and no discovery work runs.
+// ---------------------------------------------------------------------------
+
+// Artist name → MusicBrainz artist MBID (cached per session).
+const artistMbidCache = new Map();
+async function fetchArtistMbid(artistName) {
+  if (!artistName) return null;
+  const key = normalize(artistName);
+  if (artistMbidCache.has(key)) return artistMbidCache.get(key);
+  await mbWait();
+  const q = `artist:"${mbQuote(artistName)}"`;
+  const url = `https://musicbrainz.org/ws/2/artist/?query=${encodeURIComponent(q)}&fmt=json&limit=1`;
+  let mbid = null;
+  try {
+    const json = await httpJson(url, { "User-Agent": MB_USER_AGENT });
+    const artists = json && json.artists;
+    if (Array.isArray(artists) && artists.length) mbid = artists[0].id || null;
+  } catch (e) {
+    if (DEBUG) console.error("[display:mb:artist]", e.message);
+  }
+  artistMbidCache.set(key, mbid);
+  return mbid;
+}
+
+// Artist photos via fanart.tv (same key the labels pipeline uses). Prefers the
+// widescreen artistbackground images; falls back to artistthumb. Cached per
+// artist; failures cache an empty list so we don't hammer the API.
+const artistPhotoCache = new Map();
+async function fetchArtistPhotos(artistName) {
+  if (!artistName || !fanartKey) return [];
+  const key = normalize(artistName);
+  if (artistPhotoCache.has(key)) return artistPhotoCache.get(key);
+  let photos = [];
+  try {
+    const mbid = await fetchArtistMbid(artistName);
+    if (mbid) {
+      const url = `https://webservice.fanart.tv/v3/music/${encodeURIComponent(mbid)}?api_key=${fanartKey}`;
+      const json = await httpJson(url);
+      const bgs    = Array.isArray(json.artistbackground) ? json.artistbackground : [];
+      const thumbs = Array.isArray(json.artistthumb)      ? json.artistthumb      : [];
+      photos = bgs.concat(thumbs).map(x => x && x.url).filter(Boolean).slice(0, 4);
+    }
+  } catch (e) {
+    if (DEBUG) console.error("[display:fanart]", e.message);
+  }
+  artistPhotoCache.set(key, photos);
+  return photos;
+}
+
+// Muted video clip via the YouTube Data API — only when the user supplied a
+// key in Settings. Cached per artist+track; failures cache null.
+const displayVideoCache = new Map();
+async function fetchDisplayVideo(artistName, trackName) {
+  if (!youtubeKey || !artistName || !trackName) return null;
+  const key = normalize(artistName) + "||" + normalize(trackName);
+  if (displayVideoCache.has(key)) return displayVideoCache.get(key);
+  let video = null;
+  try {
+    const q = `${artistName} ${trackName} official video`;
+    const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video" +
+      "&videoEmbeddable=true&maxResults=1&q=" + encodeURIComponent(q) +
+      "&key=" + encodeURIComponent(youtubeKey);
+    const json = await httpJson(url);
+    const id = json && json.items && json.items[0] &&
+               json.items[0].id && json.items[0].id.videoId;
+    if (id) {
+      video = {
+        embedUrl: "https://www.youtube-nocookie.com/embed/" + id +
+          "?autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0" +
+          "&loop=1&playlist=" + id
+      };
+    }
+  } catch (e) {
+    if (DEBUG) console.error("[display:youtube]", e.message);
+  }
+  displayVideoCache.set(key, video);
+  return video;
+}
+
+// Assembled rotation content per album (photos + review + video), cached 6h.
+const displayContentCache = new Map();
+const DISPLAY_CONTENT_TTL_MS = 6 * 60 * 60 * 1000;
+app.get("/api/display/content", async (req, res) => {
+  if (!displayEnabled) return res.status(403).json({ error: "Wall display is turned off in Settings" });
+  if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
+  const zone = zones[String(req.query.zone || "")];
+  const np = zone && zone.now_playing;
+  if (!np) return res.json({ artistPhotos: [], review: null, video: null });
+  const lines  = np.three_line || np.one_line || {};
+  const track  = lines.line1 || "";
+  const artist = lines.line2 || "";
+  const album  = lines.line3 || "";
+  // Multi-artist credits ("A / B / C") → the primary artist fronts the photos.
+  const primaryArtist = artist.split(" / ")[0].trim();
+
+  const cacheKey = normalize(artist) + "||" + normalize(album) + "||" + normalize(track);
+  const hit = displayContentCache.get(cacheKey);
+  if (hit && (Date.now() - hit.at) < DISPLAY_CONTENT_TTL_MS) return res.json(hit.data);
+
+  try {
+    const [photos, bios, video] = await Promise.all([
+      fetchArtistPhotos(primaryArtist).catch(() => []),
+      album ? fetchAlbumBios(album, artist).catch(() => null) : Promise.resolve(null),
+      fetchDisplayVideo(primaryArtist, track).catch(() => null)
+    ]);
+    // Review card: the album description when a displayable one exists
+    // (Qobuz/Wikipedia — fetchAlbumBios nulls Pitchfork text for UK-law
+    // compliance), else the artist's Wikipedia bio.
+    let review = null;
+    if (bios && bios.album && bios.album.description) {
+      review = { text: bios.album.description,
+                 attribution: "About this album — " + (bios.album.source || "") };
+    } else if (bios && bios.artist && bios.artist.description) {
+      review = { text: bios.artist.description,
+                 attribution: "About " + (bios.artist.name || primaryArtist) + " — " + (bios.artist.source || "Wikipedia") };
+    }
+    const data = { artistPhotos: photos, review, video };
+    displayContentCache.delete(cacheKey);   // re-set moves the key to newest position
+    displayContentCache.set(cacheKey, { at: Date.now(), data });
+    if (displayContentCache.size > 200) {
+      const oldest = displayContentCache.keys().next().value;
+      displayContentCache.delete(oldest);
+    }
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Display settings — the /display page polls this to honour the toggle live.
+app.get("/api/settings/display", (req, res) => {
+  res.json({ enabled: displayEnabled, seconds: displaySeconds });
+});
+app.post("/api/settings/display", (req, res) => {
+  const b = req.body || {};
+  if (typeof b.enabled === "boolean") displayEnabled = b.enabled;
+  if (b.seconds != null) {
+    const s = parseInt(b.seconds, 10);
+    if (Number.isFinite(s) && s >= 5 && s <= 60) displaySeconds = s;
+  }
+  const ok = savePersistedSettings({ displayEnabled, displaySeconds });
+  res.json({ ok, enabled: displayEnabled, seconds: displaySeconds });
+});
+
+// Optional YouTube Data API key (masked on read, like the fanart key).
+app.get("/api/settings/youtube-key", (req, res) => {
+  res.json({ set: !!youtubeKey, masked: youtubeKey ? youtubeKey.slice(0, 4) + "…" : "" });
+});
+app.post("/api/settings/youtube-key", (req, res) => {
+  youtubeKey = String((req.body && req.body.key) || "").trim();
+  displayVideoCache.clear();   // a new key may find videos the old one couldn't
+  const ok = savePersistedSettings({ youtubeKey });
+  res.json({ ok, set: !!youtubeKey });
+});
+
+// The wall page itself. Served regardless of the toggle — the page shows a
+// "turned off" note (and fetches nothing) when disabled, so flipping the
+// Settings toggle brings a mounted wall tablet to life without a reload.
+app.get("/display", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "display.html"));
 });
 
 // Pitchfork magazine — a browsable listing of recent album reviews or Best New

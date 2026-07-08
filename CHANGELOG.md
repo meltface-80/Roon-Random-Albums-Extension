@@ -2,6 +2,12 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.17] — 2026-07-08
+
+### Added
+- **Wall display** — a Roon-style always-on screen at `http://<server-ip>:3399/display`. Point any tablet or TV browser at it: it follows the playing zone (pin one with `?zone=<name>`) and rotates between **album art**, **artist photos** (fanart.tv, using your existing key), an **album review card** (the same legally-safe Qobuz/Wikipedia text as the album view — Pitchfork text stays link-only), and a **muted video clip** of the playing song (optional — needs a free YouTube Data API key, new field in Settings; without one the rotation simply skips video). A Nest-Hub-style progress strip along the bottom shows track, artist · album, elapsed/total and a thin progress bar.
+- **Settings → Wall display**: an on/off toggle and a "rotate every N seconds" slider (5–60s, default 10s). When off, the page shows a notice and **nothing is fetched** — no lookups, no polling work; flipping the toggle brings a mounted display to life within 30 seconds, no reload needed.
+
 ## [1.6.16] — 2026-07-08
 
 ### Fixed
