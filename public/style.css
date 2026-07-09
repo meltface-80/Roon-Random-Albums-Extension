@@ -2000,6 +2000,9 @@ main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 .switch input:checked + .switch-track .switch-thumb { transform: translateX(18px); background: #fff; }
 .switch input:focus-visible + .switch-track { box-shadow: 0 0 0 3px var(--accent-soft); }
 
+/* Range slider in the settings sheet (wall-display rotation interval). */
+.settings-range { flex: 1; max-width: 180px; accent-color: var(--accent); cursor: pointer; }
+
 /* --- Now-playing: device picker + volume popover (v1.4.0) --------------- */
 .np-secondary { position: relative; }
 

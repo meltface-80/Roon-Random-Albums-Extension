@@ -55,6 +55,25 @@ let zones     = {};
 let outputs   = {};
 const scrobbleState = new Map();
 
+// Roon pairing state must survive container rebuilds. node-roon-api's default
+// persistence writes ./config.json relative to CWD (= /app, wiped by every
+// docker update), so each update registered as a brand-new extension: Roon
+// issued a fresh authorization every time and the old entries lingered as
+// ghosts in Settings → Extensions → View extension authorizations. Keep the
+// state on the mounted data volume instead, migrating any legacy token once
+// so a running install keeps its existing pairing.
+const ROON_STATE_FILE = path.join(__dirname, "data", "roonstate.json");
+try {
+  const legacyFile = path.join(__dirname, "config.json");
+  if (!fs.existsSync(ROON_STATE_FILE) && fs.existsSync(legacyFile)) {
+    const legacy = JSON.parse(fs.readFileSync(legacyFile, "utf8"));
+    if (legacy && legacy.roonstate) {
+      fs.mkdirSync(path.dirname(ROON_STATE_FILE), { recursive: true });
+      fs.writeFileSync(ROON_STATE_FILE, JSON.stringify(legacy.roonstate, null, 2));
+    }
+  }
+} catch (e) { /* unreadable legacy config — start unpaired; user authorises once */ }
+
 const roon = new RoonApi({
   extension_id:        "com.musicd.roon.random-albums",
   display_name:        "MusicD Random Albums v" + DISPLAY_SHORTVER,
@@ -62,6 +81,18 @@ const roon = new RoonApi({
   publisher:           "MusicD",
   email:               "hello@musicd.app",
   log_level:           "none",
+
+  // Pairing token persistence on the data volume (see ROON_STATE_FILE above).
+  get_persisted_state: () => {
+    try { return JSON.parse(fs.readFileSync(ROON_STATE_FILE, "utf8")) || {}; }
+    catch (e) { return {}; }   // missing/corrupt state file — register fresh
+  },
+  set_persisted_state: (state) => {
+    try {
+      fs.mkdirSync(path.dirname(ROON_STATE_FILE), { recursive: true });
+      fs.writeFileSync(ROON_STATE_FILE, JSON.stringify(state, null, 2));
+    } catch (e) { /* data volume unavailable — pairing lasts this run only */ }
+  },
 
   core_paired: function (c) {
     core = c;
@@ -824,6 +855,16 @@ let fanartKey    = _persisted.fanartKey    || "";
 // 0 = off (use the file's label tag, the default). Immune to disc subfolders
 // because it's measured from the music root, not the audio folder.
 let labelFolderDepth = parseInt(_persisted.labelFolderDepth, 10) || 0;
+// Wall display (/display): off by default — when off the page fetches nothing
+// and the content endpoint refuses, so no discovery work happens at all.
+let displayEnabled = _persisted.displayEnabled === true;
+let displaySeconds = (() => {
+  const s = parseInt(_persisted.displaySeconds, 10);
+  return Number.isFinite(s) && s >= 5 && s <= 60 ? s : 10;
+})();
+// Optional YouTube Data API key — enables the display's muted video-clip
+// slides. Without it, video is simply omitted from the rotation.
+let youtubeKey = _persisted.youtubeKey || "";
 
 // Short-lived cache of a streaming service's favourited album ids, shared by
 // all of that service's browse routes so each page render doesn't re-fetch the
@@ -5156,6 +5197,276 @@ app.get("/api/album/extras", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Wall display (/display) — a Roon-style always-on screen that rotates
+// between album art, artist photos (fanart.tv), a review card (the same
+// legally-safe Qobuz/Wikipedia text the album modal shows — Pitchfork text
+// stays suppressed) and a muted video clip (YouTube, only when the user has
+// configured an API key). Everything is gated on the Settings toggle: when
+// off, the content endpoint refuses and no discovery work runs.
+// ---------------------------------------------------------------------------
+
+// Artist name → MusicBrainz artist MBID (cached per session).
+const artistMbidCache = new Map();
+async function fetchArtistMbid(artistName) {
+  if (!artistName) return null;
+  const key = normalize(artistName);
+  if (artistMbidCache.has(key)) return artistMbidCache.get(key);
+  await mbWait();
+  const q = `artist:"${mbQuote(artistName)}"`;
+  const url = `https://musicbrainz.org/ws/2/artist/?query=${encodeURIComponent(q)}&fmt=json&limit=1`;
+  let mbid = null;
+  try {
+    const json = await httpJson(url, { "User-Agent": MB_USER_AGENT });
+    const artists = json && json.artists;
+    if (Array.isArray(artists) && artists.length) mbid = artists[0].id || null;
+  } catch (e) {
+    if (DEBUG) console.error("[display:mb:artist]", e.message);
+  }
+  artistMbidCache.set(key, mbid);
+  return mbid;
+}
+
+// Artist photos via fanart.tv (same key the labels pipeline uses). Prefers the
+// widescreen artistbackground images; falls back to artistthumb. Cached per
+// artist; failures cache an empty list so we don't hammer the API.
+const artistPhotoCache = new Map();
+async function fetchArtistPhotos(artistName) {
+  if (!artistName || !fanartKey) return [];
+  const key = normalize(artistName);
+  if (artistPhotoCache.has(key)) return artistPhotoCache.get(key);
+  let photos = [];
+  try {
+    const mbid = await fetchArtistMbid(artistName);
+    if (mbid) {
+      const url = `https://webservice.fanart.tv/v3/music/${encodeURIComponent(mbid)}?api_key=${fanartKey}`;
+      const json = await httpJson(url);
+      const bgs    = Array.isArray(json.artistbackground) ? json.artistbackground : [];
+      const thumbs = Array.isArray(json.artistthumb)      ? json.artistthumb      : [];
+      photos = bgs.concat(thumbs).map(x => x && x.url).filter(Boolean).slice(0, 4);
+    }
+  } catch (e) {
+    if (DEBUG) console.error("[display:fanart]", e.message);
+  }
+  artistPhotoCache.set(key, photos);
+  return photos;
+}
+
+// Muted video clip via the YouTube Data API — only when the user supplied a
+// key in Settings. PRECISION-FIRST: the display shows the artist's official
+// music video or an official live performance, or NOTHING — never chat-show
+// clips, fan uploads, or " - Topic" auto-uploads (those are static album art
+// with audio: worthless on a muted screen). Candidates are scored on channel
+// ownership + title keywords and must clear a threshold; the survivors are
+// verified via videos.list (embeddable, public, not age-restricted — age
+// restriction never plays embedded). Cached per artist+track incl. negatives
+// (search.list costs 100 quota units of the 10k/day default).
+const displayVideoCache = new Map();
+function scoreDisplayVideo(item, artistN, trackTokens) {
+  const title    = (item.snippet && item.snippet.title        || "");
+  const channel  = (item.snippet && item.snippet.channelTitle || "");
+  const titleN   = normalize(title);
+  const channelN = normalize(channel);
+  // Hard rejects: auto-generated audio uploads and non-video content.
+  if (/ - topic$/i.test(channel)) return -1;
+  if (/\b(audio|lyric|lyrics|visuali[sz]er|cover|reaction|remix|sped|slowed|8d|karaoke|instrumental|full album|teaser|trailer|interview|behind the scenes|epk|shorts?)\b/i.test(title)) return -1;
+  // Every significant token of the track name must appear in the video title.
+  for (const t of trackTokens) if (titleN.indexOf(t) === -1) return -1;
+  let score = 0;
+  // The artist's OWN channel (or their VEVO) is trusted outright: real artist
+  // channels (e.g. Stereophonics) title their uploads plainly — "Artist -
+  // Track" with no "official" suffix — and those ARE the official videos.
+  // The v1.6.19 scorer demanded the keyword on top and rejected them.
+  const channelIsArtist = channelN === artistN || channelN === artistN + " vevo" ||
+                          channelN === artistN + " music" || channelN === artistN + " official" ||
+                          channelN.replace(/\s+/g, "") === artistN.replace(/\s+/g, "") + "vevo";
+  if (channelIsArtist) score += 70;
+  else if (channelN.indexOf(artistN) !== -1) score += 40; // artist-adjacent channel: needs the keyword too
+  else return -1;                                         // chat shows / fan uploads — reject outright
+  if (/\bofficial (music )?video\b/i.test(title)) score += 30;
+  else if (/\(official\b/i.test(title)) score += 20;
+  if (/\blive\b/i.test(title)) {
+    if (score >= 70) score += 20;                         // live on the artist's own channel — welcome
+    else return -1;                                       // random live bootleg — reject
+  }
+  return score;
+}
+async function fetchDisplayVideo(artistName, trackName) {
+  if (!youtubeKey || !artistName || !trackName) return null;
+  const key = normalize(artistName) + "||" + normalize(trackName);
+  const hit = displayVideoCache.get(key);
+  if (hit) {
+    // Positive verdicts hold for the session; a "no video" verdict expires
+    // after 30 min so transient API failures don't blank a track for good.
+    if (hit.video || (Date.now() - hit.at) < 30 * 60 * 1000) return hit.video;
+    displayVideoCache.delete(key);
+  }
+  let video = null;
+  try {
+    // Plain artist+track query, no category filter: recall is the search's
+    // job (artist channels titling uploads without "official" must surface);
+    // precision is the scorer's.
+    const q = `${artistName} ${trackName}`;
+    const searchUrl = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video" +
+      "&videoEmbeddable=true&videoSyndicated=true&maxResults=10" +
+      "&q=" + encodeURIComponent(q) + "&key=" + encodeURIComponent(youtubeKey);
+    const json = await httpJson(searchUrl);
+    const artistN = normalize(artistName);
+    const trackTokens = normalize(trackName).split(" ").filter(t => t.length > 2);
+    const scored = ((json && json.items) || [])
+      .filter(it => it && it.id && it.id.videoId && it.snippet)
+      .map(it => ({ id: it.id.videoId, score: scoreDisplayVideo(it, artistN, trackTokens) }))
+      .filter(c => c.score >= 70)
+      .sort((a, b) => b.score - a.score);
+    if (scored.length) {
+      const statusUrl = "https://www.googleapis.com/youtube/v3/videos?part=status,contentDetails,statistics" +
+        "&id=" + encodeURIComponent(scored.map(c => c.id).join(",")) +
+        "&key=" + encodeURIComponent(youtubeKey);
+      const st = await httpJson(statusUrl);
+      const playable = new Map(((st && st.items) || [])
+        .filter(v => v && v.status && v.status.embeddable && v.status.privacyStatus === "public" &&
+                     !(v.contentDetails && v.contentDetails.contentRating &&
+                       v.contentDetails.contentRating.ytRating === "ytAgeRestricted"))
+        .map(v => [v.id, parseInt((v.statistics && v.statistics.viewCount) || "0", 10)]));
+      // Highest score wins; view count breaks ties between equal scores.
+      const best = scored
+        .filter(c => playable.has(c.id))
+        .sort((a, b) => (b.score - a.score) || (playable.get(b.id) - playable.get(a.id)))[0];
+      if (best) {
+        video = {
+          videoId: best.id,
+          embedUrl: "https://www.youtube-nocookie.com/embed/" + best.id +
+            "?autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0" +
+            "&loop=1&playlist=" + best.id + "&enablejsapi=1"
+        };
+      }
+    }
+  } catch (e) {
+    if (DEBUG) console.error("[display:youtube]", e.message);
+  }
+  displayVideoCache.set(key, { at: Date.now(), video });
+  return video;
+}
+
+// Assembled rotation content per album (photos + review + video), cached 6h.
+const displayContentCache = new Map();
+const DISPLAY_CONTENT_TTL_MS = 6 * 60 * 60 * 1000;
+app.get("/api/display/content", async (req, res) => {
+  if (!displayEnabled) return res.status(403).json({ error: "Wall display is turned off in Settings" });
+  if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
+  const zone = zones[String(req.query.zone || "")];
+  const np = zone && zone.now_playing;
+  if (!np) return res.json({ artistPhotos: [], review: null, video: null });
+  const lines  = np.three_line || np.one_line || {};
+  const track  = lines.line1 || "";
+  const artist = lines.line2 || "";
+  const album  = lines.line3 || "";
+  // Multi-artist credits ("A / B / C") → the primary artist fronts the photos.
+  const primaryArtist = artist.split(" / ")[0].trim();
+
+  const cacheKey = normalize(artist) + "||" + normalize(album) + "||" + normalize(track);
+  const hit = displayContentCache.get(cacheKey);
+  if (hit && (Date.now() - hit.at) < DISPLAY_CONTENT_TTL_MS) return res.json(hit.data);
+
+  try {
+    const [photos, bios, video] = await Promise.all([
+      fetchArtistPhotos(primaryArtist).catch(() => []),
+      album ? fetchAlbumBios(album, artist).catch(() => null) : Promise.resolve(null),
+      fetchDisplayVideo(primaryArtist, track).catch(() => null)
+    ]);
+    // Review card: the album description when a displayable one exists
+    // (Qobuz/Wikipedia — fetchAlbumBios nulls Pitchfork text for UK-law
+    // compliance). The artist's Wikipedia bio is its own separate slide.
+    let review = null;
+    if (bios && bios.album && bios.album.description) {
+      review = { text: bios.album.description,
+                 attribution: "About this album — " + (bios.album.source || "") };
+    }
+    let bio = null;
+    if (bios && bios.artist && bios.artist.description) {
+      bio = { name: bios.artist.name || primaryArtist,
+              text: bios.artist.description,
+              attribution: "About " + (bios.artist.name || primaryArtist) + " — " + (bios.artist.source || "Wikipedia") };
+    }
+    // Library recommendations — instant, no API keys: other albums by this
+    // artist from the in-memory album index, and label-mates from the labels
+    // index. Both use the same tile shape the display renders as cover grids.
+    const npTitleN = normalize(album);
+    const artistN  = normalize(primaryArtist);
+    const moreArtist = [];
+    if (artistN) {
+      for (const al of albumIndex.albums) {
+        if (moreArtist.length >= 12) break;
+        if (normalize(al.title) === npTitleN) continue;
+        const subN = normalize(al.subtitle || "");
+        if (subN === artistN || subN.split(" / ").indexOf(artistN) !== -1 ||
+            subN.startsWith(artistN + " /") || subN.indexOf(" / " + artistN) !== -1) {
+          moreArtist.push({ offset: al.offset, title: al.title || "", subtitle: al.subtitle || "", image_key: al.image_key || null });
+        }
+      }
+    }
+    let moreLabel = null;
+    const labelName = labelDiskCache.get(npTitleN + "||" + normalize(artist));
+    if (labelName) {
+      const entry = labelsIndex.map.get(labelGroupKey(labelName));
+      if (entry && entry.albums && entry.albums.length >= 4) {
+        const picks = entry.albums.filter(a => normalize(a.title) !== npTitleN).slice(0, 12)
+          .map(a => ({ offset: a.offset, title: a.title || "", subtitle: a.subtitle || "", image_key: a.image_key || null }));
+        if (picks.length >= 3) moreLabel = { name: entry.display || labelName, albums: picks };
+      }
+    }
+    const data = {
+      artistPhotos: photos, review, bio, video,
+      moreAlbums: {
+        artist: moreArtist.length >= 3 ? { name: primaryArtist, albums: moreArtist } : null,
+        label:  moreLabel
+      }
+    };
+    displayContentCache.delete(cacheKey);   // re-set moves the key to newest position
+    displayContentCache.set(cacheKey, { at: Date.now(), data });
+    if (displayContentCache.size > 200) {
+      const oldest = displayContentCache.keys().next().value;
+      displayContentCache.delete(oldest);
+    }
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Display settings — the /display page polls this to honour the toggle live.
+app.get("/api/settings/display", (req, res) => {
+  res.json({ enabled: displayEnabled, seconds: displaySeconds });
+});
+app.post("/api/settings/display", (req, res) => {
+  const b = req.body || {};
+  if (typeof b.enabled === "boolean") displayEnabled = b.enabled;
+  if (b.seconds != null) {
+    const s = parseInt(b.seconds, 10);
+    if (Number.isFinite(s) && s >= 5 && s <= 60) displaySeconds = s;
+  }
+  const ok = savePersistedSettings({ displayEnabled, displaySeconds });
+  res.json({ ok, enabled: displayEnabled, seconds: displaySeconds });
+});
+
+// Optional YouTube Data API key (masked on read, like the fanart key).
+app.get("/api/settings/youtube-key", (req, res) => {
+  res.json({ set: !!youtubeKey, masked: youtubeKey ? youtubeKey.slice(0, 4) + "…" : "" });
+});
+app.post("/api/settings/youtube-key", (req, res) => {
+  youtubeKey = String((req.body && req.body.key) || "").trim();
+  displayVideoCache.clear();   // a new key may find videos the old one couldn't
+  const ok = savePersistedSettings({ youtubeKey });
+  res.json({ ok, set: !!youtubeKey });
+});
+
+// The wall page itself. Served regardless of the toggle — the page shows a
+// "turned off" note (and fetches nothing) when disabled, so flipping the
+// Settings toggle brings a mounted wall tablet to life without a reload.
+app.get("/display", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "display.html"));
 });
 
 // Pitchfork magazine — a browsable listing of recent album reviews or Best New

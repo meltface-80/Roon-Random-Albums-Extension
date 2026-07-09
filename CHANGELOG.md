@@ -2,6 +2,53 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.21] — 2026-07-09
+
+### Fixed
+- **Wall display: skipping a track no longer keeps the previous track's video playing.** Content was reloaded per album; the video is per track, so a skip within the same album left the old clip running (the bug that needed a force-close). Content now reloads per track — the album-level parts (photos, review, bio, library grids) are served from cache so the refresh is instant.
+- **Wall display: the video starts at the track's live position** (best-effort sync — video edits rarely match track length exactly), instead of always starting from 0 while the song is mid-way.
+- A "no video found" verdict now expires after 30 minutes instead of sticking for the whole server session, so transient YouTube API failures don't blank a track's video for good.
+
+### Changed
+- **When a track has a video, the display opens straight to it and stays on it** — synced and playing through — unless a mode chip is tapped. Tracks without a video rotate as before. A manual pin still always wins.
+
+### Added
+- **Library grid albums are now tappable: Play now / Queue.** Tap a cover on the "More from <artist>" / "More on <label>" screens → a panel offers **▶ Play now** and **+ Queue** to the display's zone (same playback path as the album view). The panel auto-dismisses, and confirms with "Playing ✓ / Queued ✓".
+
+## [1.6.20] — 2026-07-08
+
+### Fixed
+- **Wall display: videos from real artist channels now qualify.** The v1.6.19 scorer demanded "official video" in the title on top of the channel match — but genuine artist channels (e.g. Stereophonics) title their uploads plainly ("Artist – Track"), so nothing passed. The artist's own channel (including "Artist Music" / "Artist Official" / VEVO variants) is now trusted outright; the search query and category filter were also loosened so those uploads surface at all (the scorer still rejects Topic audio, teasers, interviews, chat shows, lyric videos, covers and bootlegs).
+
+### Added
+- **Wall display: on-screen mode controls.** Tap the screen (or move the mouse) to reveal a chip bar — **Auto** rotates everything; **Art / Photos / Bio / Review / Library / Video** pin that screen. Photos cycle within themselves when pinned; a pinned **Video plays through in full** (and loops) instead of rotating away after N seconds. Chips only appear for content that exists for the current album; a pinned choice survives album changes and re-applies whenever the new album has that content. Controls fade out after 5 seconds.
+
+## [1.6.19] — 2026-07-08
+
+### Changed
+- **Wall display videos: official music video or official live performance — or nothing.** Candidates are now scored precision-first: the channel must be the artist's own (or their VEVO); "official (music) video" titles score highest; live versions are accepted only from the artist's own channel. Hard-rejected outright: " - Topic" auto-uploads (static album art with audio — pointless muted), lyric videos, visualizers, covers, reactions, remixes, karaoke, chat-show/fan uploads, and any title missing the track name. Survivors are verified playable (embeddable, public, not age-restricted — age-restricted never plays embedded) with view count as tiebreak. A wrong video no longer beats no video.
+
+### Added
+- **Wall display: artist bio card** — the artist's Wikipedia biography is now its own rotation slide (the review card keeps the album text).
+- **Wall display: "More from <artist>" and "More on <label>" slides** — cover grids drawn instantly from your own library (album index + labels index, no API keys): other albums by the playing artist, and label-mates of the playing album. Only shown when there are at least 3 to show.
+
+## [1.6.18] — 2026-07-08
+
+### Fixed
+- **Wall display: video clips now actually play.** Videos were found but rendered as YouTube's "Video unavailable — Watch on YouTube" card: the search API's embeddable filter is unreliable, and many music videos block third-party embedding. The server now verifies the top 5 results against YouTube's `status.embeddable` flag and picks the first video that genuinely allows embedding; the page also switched to the YouTube IFrame Player API so any failure that still slips through (region blocks, takedowns) is detected and the video is dropped from the rotation — album art returns instead of an error card sitting on screen.
+- **Wall display never scrolls and the progress strip always stays on screen** — the page body is pinned to the visual viewport with touch panning disabled (iOS Safari ignores plain `overflow:hidden` for touch drags), so nothing can rubber-band the bar out of view on phones.
+
+## [1.6.17] — 2026-07-08
+
+### Added
+- **Wall display** — a Roon-style always-on screen at `http://<server-ip>:3399/display`. Point any tablet or TV browser at it: it follows the playing zone (pin one with `?zone=<name>`) and rotates between **album art**, **artist photos** (fanart.tv, using your existing key), an **album review card** (the same legally-safe Qobuz/Wikipedia text as the album view — Pitchfork text stays link-only), and a **muted video clip** of the playing song (optional — needs a free YouTube Data API key, new field in Settings; without one the rotation simply skips video). A Nest-Hub-style progress strip along the bottom shows track, artist · album, elapsed/total and a thin progress bar.
+- **Settings → Wall display**: an on/off toggle and a "rotate every N seconds" slider (5–60s, default 10s). When off, the page shows a notice and **nothing is fetched** — no lookups, no polling work; flipping the toggle brings a mounted display to life within 30 seconds, no reload needed.
+
+## [1.6.16] — 2026-07-08
+
+### Fixed
+- **Updates no longer pile up duplicate entries in Roon's "Extension authorizations" list.** The Roon pairing token was stored in `config.json` in the container's working directory — wiped by every docker update — so each new build registered as a brand-new extension and Roon issued a fresh authorization, leaving the old ones behind as ghosts. The pairing state now lives on the persistent data volume (`data/roonstate.json`), with a one-time migration for a running install's existing token, so future updates reconnect with the same authorization. The stale duplicate entries need removing once by hand (Roon → Settings → Extensions → View extension authorizations → Remove the old builds).
+
 ## [1.6.15] — 2026-07-08
 
 ### Changed — performance pass (the UI had grown sluggish since the Home redesign)

@@ -1,0 +1,68 @@
+<!doctype html>
+<!--
+  Roon Random Albums — wall display (/display)
+  Copyright (c) 2026 Lewis Menzies (Music Duck / MusicD)
+  Released under the MIT License. See the LICENSE file for details.
+
+  A Roon-style always-on display: rotates between album art, artist photos,
+  an album review card and a muted video clip (when available), with a
+  Nest-Hub-style progress strip along the bottom. Read-only — no controls.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>MusicD Display</title>
+  <link rel="stylesheet" href="/display.css">
+</head>
+<body>
+  <!-- Blurred backdrop of the current cover, behind everything -->
+  <img id="backdrop" class="backdrop" alt="" aria-hidden="true">
+
+  <!-- Two stacked slide layers; rotation crossfades between them -->
+  <div id="stage" class="stage" aria-live="off">
+    <div class="slide" id="slide-a"></div>
+    <div class="slide" id="slide-b"></div>
+  </div>
+
+  <!-- Idle / off states -->
+  <div id="idle" class="center-msg hidden">
+    <div class="idle-title">Nothing playing</div>
+    <div class="idle-sub">The display will wake when music starts</div>
+  </div>
+  <div id="off" class="center-msg hidden">
+    <div class="idle-title">Display is turned off</div>
+    <div class="idle-sub">Enable “Wall display” in MusicD Settings</div>
+  </div>
+
+  <!-- Mode controls: revealed by tap/mouse, auto-hide. Auto = rotate; any
+       other chip pins that screen; Video plays the clip through in full. -->
+  <div id="controls" class="controls" aria-label="Display mode"></div>
+
+  <!-- Tap-to-play panel for the library grids: pick Play now / Queue -->
+  <div id="playpanel" class="playpanel hidden">
+    <div id="pp-title" class="pp-title">—</div>
+    <div class="pp-actions">
+      <button id="pp-play"  class="pp-btn pp-primary" type="button">▶ Play now</button>
+      <button id="pp-queue" class="pp-btn" type="button">+ Queue</button>
+      <button id="pp-close" class="pp-btn pp-quiet" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Bottom progress strip (Nest-Hub style) -->
+  <div id="bottombar" class="bottombar hidden">
+    <div class="bb-text">
+      <div id="bb-title" class="bb-title">—</div>
+      <div id="bb-artist" class="bb-artist">—</div>
+    </div>
+    <div class="bb-progress-row">
+      <span id="bb-cur" class="bb-time">0:00</span>
+      <div class="bb-track"><div id="bb-fill" class="bb-fill"></div></div>
+      <span id="bb-tot" class="bb-time">0:00</span>
+    </div>
+  </div>
+
+  <script src="/display.js"></script>
+</body>
+</html>
