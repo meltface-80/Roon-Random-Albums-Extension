@@ -394,6 +394,7 @@
     const back  = frontIsA ? slideB : slideA;
     back.innerHTML = "";
     back.classList.toggle("full", full);
+    back.classList.toggle("photo-slide", eff[slideIdx].kind === "photo");
     back.appendChild(node);
     // Crossfade, then empty the hidden layer so a finished video/iframe
     // doesn't keep loading behind the visible slide.

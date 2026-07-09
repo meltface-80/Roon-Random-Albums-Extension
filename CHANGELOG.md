@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.24] — 2026-07-09
+
+### Fixed
+- **Wall display: artist photos are no longer cropped top and bottom.** Portrait/full-frame band photos were shown with `object-fit: cover`, which fills the screen by clipping whatever doesn't fit — so heads and feet got cut off on tablet/desktop. The photo slide now uses `object-fit: contain`: the whole photo is always shown, letterboxed with black bars on the sides when it's a different shape from the screen, and the slide reserves the bottom strip's height so the full image stays clear of the progress bar.
+
 ## [1.6.23] — 2026-07-09
 
 ### Fixed
