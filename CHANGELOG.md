@@ -2,6 +2,12 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.23] — 2026-07-09
+
+### Fixed
+- **Wall display: covers on the "More on <label>" grid are now tappable (Play now / Queue), like the artist grid.** The label grid took its album offsets from the labels index, which is a snapshot that isn't rebuilt when the album index is — so after any library change/reorder those offsets went stale and the covers pointed at the wrong album or an empty slot, making them unresponsive. The label grid now re-resolves every album against the live album index (by title + artist) at request time, so its offsets and artwork are always current; albums no longer in the library are dropped.
+- **Same staleness fixed for the labels browser generally** — the labels index is now re-seeded from the fresh album index whenever a library change triggers an album-index rebuild, so browsing a label and playing from it can't land on the wrong album after a reorder.
+
 ## [1.6.22] — 2026-07-09
 
 ### Changed

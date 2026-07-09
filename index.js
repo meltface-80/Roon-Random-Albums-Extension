@@ -2902,7 +2902,12 @@ function startIndexMaintenance() {
         ? (albumIndex.albums[0].title || "") + "||" + (albumIndex.albums[0].subtitle || "") : "";
       if (total !== albumIndex.count || (albumIndex.count > 0 && firstNow !== firstIdx)) {
         if (DEBUG) console.log("[index] library changed (count", albumIndex.count, "->", total, ") - rebuilding");
-        buildAlbumIndex().catch(() => { /* build error already logged by buildAlbumIndex */ });
+        // Re-seed labelsIndex from the fresh album index too: its album offsets
+        // are a snapshot, and a rebuild (reorder/add/remove) leaves them
+        // pointing at the wrong albums for the labels browser + display grids.
+        buildAlbumIndex()
+          .then(() => rebuildLabelsMap())
+          .catch(() => { /* build error already logged by buildAlbumIndex */ });
       }
     } catch (e) { /* browse/load probe failed — next maintenance tick will retry */ }
   }, INDEX_CHECK_MS);
@@ -5435,8 +5440,25 @@ app.get("/api/display/content", async (req, res) => {
     if (labelName) {
       const entry = labelsIndex.map.get(labelGroupKey(labelName));
       if (entry && entry.albums && entry.albums.length >= 4) {
-        const picks = entry.albums.filter(a => normalize(a.title) !== npTitleN).slice(0, 12)
-          .map(a => ({ offset: a.offset, title: a.title || "", subtitle: a.subtitle || "", image_key: a.image_key || null }));
+        // Re-resolve each label album's offset against the LIVE album index by
+        // title+artist. The labelsIndex snapshot isn't rebuilt when the album
+        // index is (a library reorder shifts offsets), so its stored offsets
+        // go stale — which left the label grid's covers pointing at the wrong
+        // album or an empty slot (the "not selectable" report). Matching to a
+        // live entry gives a current offset (and current title/art); albums no
+        // longer in the library are dropped.
+        const liveByKey = new Map();
+        for (const a of albumIndex.albums) liveByKey.set(normalize(a.title) + "||" + normalize(a.subtitle), a);
+        const picks = [];
+        const seenOffsets = new Set();
+        for (const a of entry.albums) {
+          if (picks.length >= 12) break;
+          if (normalize(a.title) === npTitleN) continue;
+          const live = liveByKey.get(normalize(a.title) + "||" + normalize(a.subtitle));
+          if (!live || seenOffsets.has(live.offset)) continue;
+          seenOffsets.add(live.offset);
+          picks.push({ offset: live.offset, title: live.title || "", subtitle: live.subtitle || "", image_key: live.image_key || null });
+        }
         if (picks.length >= 3) moreLabel = { name: entry.display || labelName, albums: picks };
       }
     }
