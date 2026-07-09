@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.25] — 2026-07-09
+
+### Fixed
+- **Wall display: covers on the "More on <label>" grid are now selectable (Play now / Queue) — for real this time.** The v1.6.23 attempt started from the labels-index snapshot and tried to match each album *back* to the live album index by title+artist; when the snapshot's stored subtitle came from a different seed source (Qobuz / disk cache) than the live Roon browse rows, the match silently failed and the tiles arrived with no usable offset, so tapping did nothing. The label grid is now built the **same way the working "More from <artist>" grid is** — by iterating the live album index directly and keeping albums whose resolved label matches the now-playing album's label. Every tile is therefore a live album-index entry carrying a current, valid offset. As a side effect this also fixes label grouping for **manually merged labels** (the entry is now looked up by the merge-redirected group key).
+
 ## [1.6.24] — 2026-07-09
 
 ### Fixed

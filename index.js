@@ -1324,6 +1324,31 @@ function rebuildLabelsMap() {
   labelsIndex.count = labelsIndex.map.size;
 }
 
+// Read-only per-album label lookup using the SAME priority the labels index is
+// seeded with (override file → disk cache → qobuzCache). Returns the raw label
+// name, or null. Used by the wall display to project the live album index onto
+// a label without depending on the labels-index snapshot's stored offsets.
+function resolveAlbumLabelName(al) {
+  const key = normalize(al.title) + "||" + normalize(al.subtitle);
+  const override = labelsOverride.get(key);
+  if (override) return override;
+  const diskLabel = labelDiskCache.get(key);
+  if (diskLabel) return diskLabel;
+  const q = qobuzCache.get(key);
+  if (q && q.label && !isLikelyNotALabel(q.label)) return q.label;
+  return null;
+}
+
+// Canonical group key for a label name, applying any manual merge redirect the
+// labels index would apply — so two albums under merged source labels compare
+// equal, exactly as they group together in the labels browser.
+function canonicalLabelGroupKey(labelName) {
+  let gk = labelGroupKey(labelName);
+  if (!gk) return null;
+  const merge = labelMerges.get(gk);
+  return merge ? merge.targetKey : gk;
+}
+
 // ---------------------------------------------------------------------------
 // iTunes Search API — primary label source. Free, no key, returns recordLabel
 // directly. Rate-limited to 3 concurrent with 500ms between batches.
@@ -5436,30 +5461,32 @@ app.get("/api/display/content", async (req, res) => {
       }
     }
     let moreLabel = null;
-    const labelName = labelDiskCache.get(npTitleN + "||" + normalize(artist));
-    if (labelName) {
-      const entry = labelsIndex.map.get(labelGroupKey(labelName));
-      if (entry && entry.albums && entry.albums.length >= 4) {
-        // Re-resolve each label album's offset against the LIVE album index by
-        // title+artist. The labelsIndex snapshot isn't rebuilt when the album
-        // index is (a library reorder shifts offsets), so its stored offsets
-        // go stale — which left the label grid's covers pointing at the wrong
-        // album or an empty slot (the "not selectable" report). Matching to a
-        // live entry gives a current offset (and current title/art); albums no
-        // longer in the library are dropped.
-        const liveByKey = new Map();
-        for (const a of albumIndex.albums) liveByKey.set(normalize(a.title) + "||" + normalize(a.subtitle), a);
-        const picks = [];
-        const seenOffsets = new Set();
-        for (const a of entry.albums) {
-          if (picks.length >= 12) break;
-          if (normalize(a.title) === npTitleN) continue;
-          const live = liveByKey.get(normalize(a.title) + "||" + normalize(a.subtitle));
-          if (!live || seenOffsets.has(live.offset)) continue;
-          seenOffsets.add(live.offset);
-          picks.push({ offset: live.offset, title: live.title || "", subtitle: live.subtitle || "", image_key: live.image_key || null });
-        }
-        if (picks.length >= 3) moreLabel = { name: entry.display || labelName, albums: picks };
+    // Build the label grid the SAME reliable way as the artist grid above:
+    // iterate the LIVE album index directly and keep albums whose resolved
+    // label matches the now-playing album's label. Every tile is therefore a
+    // live album-index entry carrying a current, valid offset. The previous
+    // approach started from the labels-index snapshot and matched back to live
+    // by title+artist; when the snapshot's subtitle came from a different seed
+    // source (Qobuz/disk) than the live Roon browse rows, the match silently
+    // failed and the tiles arrived with no usable offset — which is why they
+    // could not be selected. Projecting the live index removes that dependency.
+    const labelName = resolveAlbumLabelName({ title: album, subtitle: artist });
+    const targetKey = labelName ? canonicalLabelGroupKey(labelName) : null;
+    if (targetKey) {
+      const picks = [];
+      const seenOffsets = new Set();
+      for (const al of albumIndex.albums) {
+        if (picks.length >= 12) break;
+        if (al.offset == null || seenOffsets.has(al.offset)) continue;
+        if (normalize(al.title) === npTitleN) continue;
+        const alLabel = resolveAlbumLabelName(al);
+        if (!alLabel || canonicalLabelGroupKey(alLabel) !== targetKey) continue;
+        seenOffsets.add(al.offset);
+        picks.push({ offset: al.offset, title: al.title || "", subtitle: al.subtitle || "", image_key: al.image_key || null });
+      }
+      if (picks.length >= 3) {
+        const entry = labelsIndex.map.get(targetKey);
+        moreLabel = { name: (entry && entry.display) || canonicalLabelName(labelName), albums: picks };
       }
     }
     const data = {
