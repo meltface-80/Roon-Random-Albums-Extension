@@ -32,7 +32,7 @@ A web UI that shows a screenful of random albums from your Roon library, with in
 
 ---
 
-## Setting up Discogs and FanArt.tv API keys
+## Setting up Discogs, FanArt.tv and YouTube API keys
 
 Both are free and significantly improve label logo coverage.
 
@@ -54,6 +54,19 @@ FanArt.tv provides high-quality label logos for labels that have a MusicBrainz M
 3. follow onscreen prompts (or come back here after registering/login and click on above link)
 4. Copy the key shown there
 5. In the extension, tap the gear icon → paste into **FanArt.tv key** → tap **Save**
+
+### YouTube API key
+
+Optional: Getting a YouTube Data API v3 key (free)
+
+1. Go to console.cloud.google.com and sign in with any Google account.
+2. Create a project: click the project dropdown (top bar) → New project → name it anything (e.g. “MusicD Display”) → Create, and make sure it’s selected.
+3. Enable the API: menu → APIs & Services → Library → search “YouTube Data API v3” → open it → Enable.
+4. Create the key: APIs & Services → Credentials → + Create credentials → API key. Copy the key shown.
+5. (Recommended) Click Edit API key → under “API restrictions” choose Restrict key → tick only YouTube Data API v3 → Save. This makes the key useless for anything else if it ever leaks.
+6. Paste the key into MusicD → Settings → YouTube API key → Save.
+   
+No billing account is needed — the free quota (10,000 units/day) comfortably covers a home display: each new track costs about 100 units, and results are cached, so that’s roughly 90+ fresh tracks per day before it would ever pause until midnight (Pacific time), when the quota resets.
 
 ---
 
