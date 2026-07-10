@@ -206,13 +206,14 @@ docker build -t roon-random-albums:1.6.29 .
 ```
 
 ## 3. Run the container
-If you use local music replace /Users/yourusername/Music with the folder containing your music library.
+If you use local music replace /Users/yourusername/Music with the folder containing your music library. Note: add your Roon server IP. 
 
 ```
 docker run -d \
   --name roon-random-albums \
   --restart unless-stopped \
   -p 3399:3399 \
+  -e ROON_CORE_IP=<IP_OF_YOUR_ROON_CORE> \
   -v roon-random-albums-data:/app/data \
   -v /Users/yourusername/Music:/music:ro \
   roon-random-albums:1.6.29
@@ -225,6 +226,7 @@ docker run -d \
   --name roon-random-albums \
   --restart unless-stopped \
   -p 3399:3399 \
+  -e ROON_CORE_IP=<IP_OF_YOUR_ROON_CORE> \
   -v roon-random-albums-data:/app/data \
   roon-random-albums:1.6.29
 ```
