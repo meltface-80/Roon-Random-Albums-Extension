@@ -171,6 +171,71 @@ rm -rf /path/to/old/roon-random-albums
 
 Your Roon pairing, listening history, and label cache are all safe — they live in the Docker volume (`roon-random-albums-data`).
 
+### MacOS installs as follows
+
+For macOS, the main requirement is to install Docker Desktop first, since Docker is not included with the operating system.
+
+# 1. Install Docker Desktop
+• Download Docker Desktop for Mac from:
+https://www.docker.com/products/docker-desktop/
+(Ensure you’re installing the correct version for Mac or Intel chips)
+• Open the downloaded .dmg.
+• Drag Docker.app into your Applications folder.
+• Launch Docker from Applications.
+• Grant any permissions macOS requests.
+• Wait until Docker Desktop reports Engine running (the whale icon in the menu bar will stop animating).
+• Verify Docker is installed:
+
+```
+docker --version
+docker compose version
+```
+
+You should see version information for both commands.
+
+# 2. Download and build the extension
+Open Terminal and run:
+
+```
+mkdir -p ~/roon-random-albums
+cd ~/roon-random-albums
+curl -L -o roon-random-albums-v1.6.29-docker.tar.gz \
+https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/v1.6.29/roon-random-albums-v1.6.29-docker.tar.gz
+tar -xzf roon-random-albums-v1.6.29-docker.tar.gz
+docker build -t roon-random-albums:1.6.29 .
+```
+
+# 3. Run the container
+If you use local music replace /Users/yourusername/Music with the folder containing your music library.
+
+```
+docker run -d \
+  --name roon-random-albums \
+  --restart unless-stopped \
+  -p 3399:3399 \
+  -v roon-random-albums-data:/app/data \
+  -v /Users/yourusername/Music:/music:ro \
+  roon-random-albums:1.6.29
+```
+
+Or if you only use Qobuz or TIDAL
+
+```
+docker run -d \
+  --name roon-random-albums \
+  --restart unless-stopped \
+  -p 3399:3399 \
+  -v roon-random-albums-data:/app/data \
+  roon-random-albums:1.6.29
+```
+
+# 4. Open the extension
+In your browser, go to: (don’t forget to use your Roon server IP address)
+
+`http://<your.server.IP>:3399`
+
+Please let me know if you run into any trouble.
+
 ## Configuration
 
 | Env var      | Default   | What it does |
