@@ -2,6 +2,11 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.29] — 2026-07-10
+
+### Changed
+- **Playing a genre-, label-, tag- or decade-filtered album is much faster after the first time.** To play a filtered album the extension first has to locate that genre/label/tag in Roon's browse tree by title, which meant paging through the list 100 entries at a time — up to ~30 sequential Roon round-trips for a genre and ~200 for a label, every single time, adding seconds to each filtered play. It now remembers each filter's *position* in its (alphabetically stable) list and jumps straight there in one round-trip, verifying the title on arrival. A stale position (after a library edit shifts the list) simply falls back to the old scan and re-learns it, so it can never open the wrong album — only ever be as slow as before. Positions are relearned automatically when the library changes. Item keys, which are session-scoped, are still never cached — only the stable list position is.
+
 ## [1.6.28] — 2026-07-10
 
 ### Changed
