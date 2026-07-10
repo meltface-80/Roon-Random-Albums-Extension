@@ -2,6 +2,46 @@
 
 All notable changes to Roon Random Albums are documented here.
 
+## [1.6.28] — 2026-07-10
+
+### Changed
+- **Home screen opens instantly — it no longer reloads and re-randomises everything each time you open the PWA.** The in-memory freshness state was destroyed whenever the app was backgrounded, so every cold open rebuilt all four Home rows (Not played / Random / Label of the week / Browse by genre) from scratch behind "Loading…" placeholders. The last rendered rows are now persisted to `localStorage` and repainted the instant the app opens — before it has even reconnected to Roon — then revalidated quietly in the background with no "Loading…" flash. A reopen within 5 minutes does no refetching at all. Covers come straight from the browser's week-long HTTP cache, so it's a flash-free repaint, not a reload.
+- Root cause of the sluggish feel was confirmed (via a performance + code review) to be **client-side**, not the backend language: the server work is ~90–95% waiting on sequential Roon Core round-trips, which no rewrite (Rust/C++/.NET) would speed up. This change removes the most visible repeated cost — the full Home rebuild on every open.
+
+### Fixed
+- Instant-open review fixes: an empty `200` response while the index is still building right after a restart no longer blanks the hydrated Label-of-the-week / genre rows (the cached rows are kept until real data arrives); the unplayed and random rows now carry independent freshness timestamps so a stale row can't ride a fresh sibling's freshness; and a genuinely empty unplayed result is no longer persisted as cache.
+
+## [1.6.27] — 2026-07-09
+
+### Changed
+- **Wall display: bounded the artist-bio cache (`displayArtistBioCache`) at 500 entries**, matching the eviction its sibling `displayContentCache` already had. Found during a performance + code review of the display feature: it was the only cache that grew without a cap, so a streaming-heavy box that never restarts could accumulate one small entry per distinct artist/member name ever played. The review found no correctness bugs in the v1.6.22–v1.6.26 display changes; the O(n) per-request label scan is confirmed off the hot path (served from the 6 h content cache, keyed per track).
+
+## [1.6.26] — 2026-07-09
+
+### Fixed
+- **Wall display: the "More on <label>" grid covers are finally selectable — this was the real root cause.** The two crossfade layers (`slide-a`, `slide-b`) both cover the whole screen; the hidden layer only had `opacity: 0`, which does **not** stop it from receiving taps. Because `slide-b` sits on top, whenever a library grid rendered into the lower `slide-a` layer, the empty top layer silently swallowed every tap — so the artist grid (which happened to land on top) worked while the label grid (which landed underneath) did not, regardless of the album offsets being correct. The non-visible layer now has `pointer-events: none`, so taps always reach the grid actually on screen. Verified with a headless render test that taps a cell in both grids and confirms the Play now / Queue panel opens with the tapped album; the same test reproduces the failure when the fix is removed.
+
+## [1.6.25] — 2026-07-09
+
+### Fixed
+- **Wall display: covers on the "More on <label>" grid are now selectable (Play now / Queue) — for real this time.** The v1.6.23 attempt started from the labels-index snapshot and tried to match each album *back* to the live album index by title+artist; when the snapshot's stored subtitle came from a different seed source (Qobuz / disk cache) than the live Roon browse rows, the match silently failed and the tiles arrived with no usable offset, so tapping did nothing. The label grid is now built the **same way the working "More from <artist>" grid is** — by iterating the live album index directly and keeping albums whose resolved label matches the now-playing album's label. Every tile is therefore a live album-index entry carrying a current, valid offset. As a side effect this also fixes label grouping for **manually merged labels** (the entry is now looked up by the merge-redirected group key).
+
+## [1.6.24] — 2026-07-09
+
+### Fixed
+- **Wall display: artist photos are no longer cropped top and bottom.** Portrait/full-frame band photos were shown with `object-fit: cover`, which fills the screen by clipping whatever doesn't fit — so heads and feet got cut off on tablet/desktop. The photo slide now uses `object-fit: contain`: the whole photo is always shown, letterboxed with black bars on the sides when it's a different shape from the screen, and the slide reserves the bottom strip's height so the full image stays clear of the progress bar.
+
+## [1.6.23] — 2026-07-09
+
+### Fixed
+- **Wall display: covers on the "More on <label>" grid are now tappable (Play now / Queue), like the artist grid.** The label grid took its album offsets from the labels index, which is a snapshot that isn't rebuilt when the album index is — so after any library change/reorder those offsets went stale and the covers pointed at the wrong album or an empty slot, making them unresponsive. The label grid now re-resolves every album against the live album index (by title + artist) at request time, so its offsets and artwork are always current; albums no longer in the library are dropped.
+- **Same staleness fixed for the labels browser generally** — the labels index is now re-seeded from the fresh album index whenever a library change triggers an album-index rebuild, so browsing a label and playing from it can't land on the wrong album after a reorder.
+
+## [1.6.22] — 2026-07-09
+
+### Changed
+- **Wall display: the artist bio card now covers every credited artist.** For multi-artist credits (e.g. "Jeff Beck / Tony Hymas") a Wikipedia bio is fetched for each member (up to 4), and the bio card alternates to the next one on each rotation pass — pinning **Bio** cycles through the members too. Single-artist tracks behave as before.
+
 ## [1.6.21] — 2026-07-09
 
 ### Fixed

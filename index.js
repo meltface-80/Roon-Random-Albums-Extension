@@ -1324,6 +1324,31 @@ function rebuildLabelsMap() {
   labelsIndex.count = labelsIndex.map.size;
 }
 
+// Read-only per-album label lookup using the SAME priority the labels index is
+// seeded with (override file → disk cache → qobuzCache). Returns the raw label
+// name, or null. Used by the wall display to project the live album index onto
+// a label without depending on the labels-index snapshot's stored offsets.
+function resolveAlbumLabelName(al) {
+  const key = normalize(al.title) + "||" + normalize(al.subtitle);
+  const override = labelsOverride.get(key);
+  if (override) return override;
+  const diskLabel = labelDiskCache.get(key);
+  if (diskLabel) return diskLabel;
+  const q = qobuzCache.get(key);
+  if (q && q.label && !isLikelyNotALabel(q.label)) return q.label;
+  return null;
+}
+
+// Canonical group key for a label name, applying any manual merge redirect the
+// labels index would apply — so two albums under merged source labels compare
+// equal, exactly as they group together in the labels browser.
+function canonicalLabelGroupKey(labelName) {
+  let gk = labelGroupKey(labelName);
+  if (!gk) return null;
+  const merge = labelMerges.get(gk);
+  return merge ? merge.targetKey : gk;
+}
+
 // ---------------------------------------------------------------------------
 // iTunes Search API — primary label source. Free, no key, returns recordLabel
 // directly. Rate-limited to 3 concurrent with 500ms between batches.
@@ -2902,7 +2927,12 @@ function startIndexMaintenance() {
         ? (albumIndex.albums[0].title || "") + "||" + (albumIndex.albums[0].subtitle || "") : "";
       if (total !== albumIndex.count || (albumIndex.count > 0 && firstNow !== firstIdx)) {
         if (DEBUG) console.log("[index] library changed (count", albumIndex.count, "->", total, ") - rebuilding");
-        buildAlbumIndex().catch(() => { /* build error already logged by buildAlbumIndex */ });
+        // Re-seed labelsIndex from the fresh album index too: its album offsets
+        // are a snapshot, and a rebuild (reorder/add/remove) leaves them
+        // pointing at the wrong albums for the labels browser + display grids.
+        buildAlbumIndex()
+          .then(() => rebuildLabelsMap())
+          .catch(() => { /* build error already logged by buildAlbumIndex */ });
       }
     } catch (e) { /* browse/load probe failed — next maintenance tick will retry */ }
   }, INDEX_CHECK_MS);
@@ -5350,6 +5380,27 @@ async function fetchDisplayVideo(artistName, trackName) {
   return video;
 }
 
+// Wikipedia bio per single artist NAME (fetchWikiArtist itself is uncached —
+// the album-extras path caches per album+credit pair, which doesn't help the
+// display's per-member lookups across albums). Nulls cached too.
+const displayArtistBioCache = new Map();
+const DISPLAY_BIO_CACHE_MAX = 500;
+async function fetchDisplayArtistBio(name) {
+  const key = normalize(name);
+  if (!key) return null;
+  if (displayArtistBioCache.has(key)) return displayArtistBioCache.get(key);
+  let bio = null;
+  try { bio = await fetchWikiArtist(name); } catch (e) { /* best-effort — card is skipped */ }
+  displayArtistBioCache.set(key, bio);
+  // Bounded like displayContentCache: on a streaming-heavy, never-restarted box
+  // the set of distinct artist/member names played would otherwise grow without
+  // limit. Evict the oldest once over the cap (Map preserves insertion order).
+  if (displayArtistBioCache.size > DISPLAY_BIO_CACHE_MAX) {
+    displayArtistBioCache.delete(displayArtistBioCache.keys().next().value);
+  }
+  return bio;
+}
+
 // Assembled rotation content per album (photos + review + video), cached 6h.
 const displayContentCache = new Map();
 const DISPLAY_CONTENT_TTL_MS = 6 * 60 * 60 * 1000;
@@ -5384,12 +5435,21 @@ app.get("/api/display/content", async (req, res) => {
       review = { text: bios.album.description,
                  attribution: "About this album — " + (bios.album.source || "") };
     }
-    let bio = null;
-    if (bios && bios.artist && bios.artist.description) {
-      bio = { name: bios.artist.name || primaryArtist,
-              text: bios.artist.description,
-              attribution: "About " + (bios.artist.name || primaryArtist) + " — " + (bios.artist.source || "Wikipedia") };
-    }
+    // One bio per credited artist ("A / B / C" → up to 4), so the display's
+    // bio card can alternate members on successive rotations. Each lookup is
+    // cached by name; the first credit reuses fetchAlbumBios' artist result
+    // when it produced one.
+    const artistParts = artist.split(" / ").map(s => s.trim()).filter(Boolean).slice(0, 4);
+    const bioList = (await Promise.all(artistParts.map(async (name, i) => {
+      if (i === 0 && bios && bios.artist && bios.artist.description) {
+        return { name: bios.artist.name || name, text: bios.artist.description,
+                 attribution: "About " + (bios.artist.name || name) + " — " + (bios.artist.source || "Wikipedia") };
+      }
+      const w = await fetchDisplayArtistBio(name);
+      return w ? { name: w.name || name, text: w.description,
+                   attribution: "About " + (w.name || name) + " — Wikipedia" } : null;
+    }))).filter(Boolean);
+    const bio = bioList[0] || null;   // kept for any not-yet-refreshed display page
     // Library recommendations — instant, no API keys: other albums by this
     // artist from the in-memory album index, and label-mates from the labels
     // index. Both use the same tile shape the display renders as cover grids.
@@ -5408,17 +5468,36 @@ app.get("/api/display/content", async (req, res) => {
       }
     }
     let moreLabel = null;
-    const labelName = labelDiskCache.get(npTitleN + "||" + normalize(artist));
-    if (labelName) {
-      const entry = labelsIndex.map.get(labelGroupKey(labelName));
-      if (entry && entry.albums && entry.albums.length >= 4) {
-        const picks = entry.albums.filter(a => normalize(a.title) !== npTitleN).slice(0, 12)
-          .map(a => ({ offset: a.offset, title: a.title || "", subtitle: a.subtitle || "", image_key: a.image_key || null }));
-        if (picks.length >= 3) moreLabel = { name: entry.display || labelName, albums: picks };
+    // Build the label grid the SAME reliable way as the artist grid above:
+    // iterate the LIVE album index directly and keep albums whose resolved
+    // label matches the now-playing album's label. Every tile is therefore a
+    // live album-index entry carrying a current, valid offset. The previous
+    // approach started from the labels-index snapshot and matched back to live
+    // by title+artist; when the snapshot's subtitle came from a different seed
+    // source (Qobuz/disk) than the live Roon browse rows, the match silently
+    // failed and the tiles arrived with no usable offset — which is why they
+    // could not be selected. Projecting the live index removes that dependency.
+    const labelName = resolveAlbumLabelName({ title: album, subtitle: artist });
+    const targetKey = labelName ? canonicalLabelGroupKey(labelName) : null;
+    if (targetKey) {
+      const picks = [];
+      const seenOffsets = new Set();
+      for (const al of albumIndex.albums) {
+        if (picks.length >= 12) break;
+        if (al.offset == null || seenOffsets.has(al.offset)) continue;
+        if (normalize(al.title) === npTitleN) continue;
+        const alLabel = resolveAlbumLabelName(al);
+        if (!alLabel || canonicalLabelGroupKey(alLabel) !== targetKey) continue;
+        seenOffsets.add(al.offset);
+        picks.push({ offset: al.offset, title: al.title || "", subtitle: al.subtitle || "", image_key: al.image_key || null });
+      }
+      if (picks.length >= 3) {
+        const entry = labelsIndex.map.get(targetKey);
+        moreLabel = { name: (entry && entry.display) || canonicalLabelName(labelName), albums: picks };
       }
     }
     const data = {
-      artistPhotos: photos, review, bio, video,
+      artistPhotos: photos, review, bio, bios: bioList, video,
       moreAlbums: {
         artist: moreArtist.length >= 3 ? { name: primaryArtist, albums: moreArtist } : null,
         label:  moreLabel

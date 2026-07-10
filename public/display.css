@@ -50,8 +50,15 @@ body {
   opacity: 0;
   transition: opacity .9s ease;
   padding: 4vh 4vw 14vh;              /* keep clear of the bottom strip */
+  /* Both layers cover the whole screen; opacity:0 does NOT stop hit-testing,
+     so the layer stacked on top (slide-b, later in the DOM) would swallow
+     every tap even while invisible/empty — leaving whichever grid sits on the
+     lower layer (slide-a) unable to receive taps (the "albums on the same
+     label aren't selectable" bug). Only the visible layer takes pointer
+     events, so taps always reach the grid that is actually on screen. */
+  pointer-events: none;
 }
-.slide.visible { opacity: 1; }
+.slide.visible { opacity: 1; pointer-events: auto; }
 
 /* Album art slide */
 .slide img.art {
@@ -60,11 +67,15 @@ body {
   border-radius: 12px;
   box-shadow: 0 24px 80px rgba(0,0,0,.6);
 }
-/* Artist photo slide — full-bleed */
+/* Artist photo slide. object-fit:contain shows the WHOLE photo (never cropped
+   top/bottom) — letterboxed with black bars on the sides when the photo is a
+   different shape from the screen. The slide leaves room for the bottom
+   progress strip so the full photo stays clear of it. */
 .slide.full { padding: 0; }
+.slide.photo-slide { bottom: calc(112px + env(safe-area-inset-bottom)); }
 .slide img.photo {
   width: 100%; height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 /* Review card slide */
 .review-card {
