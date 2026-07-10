@@ -304,17 +304,49 @@ function getImage(image_key, opts) {
 // (see /api/debug/filter to dump what a level actually contains).
 // ---------------------------------------------------------------------------
 
+// Cache of an item's OFFSET within a browse list, keyed by a navigation context
+// (e.g. "genres:root", "labels:root"). item_keys themselves are session-scoped
+// and MUST NOT be cached across requests (see pickRandomAlbums), but an item's
+// POSITION in its alphabetically-stable list is reusable until the library
+// changes. This is what makes a genre/label/tag play fast: instead of paging
+// 100-at-a-time through up to thousands of entries to find the filter by title
+// (30-200 sequential Roon round-trips for a label), we load directly at the
+// cached offset in ONE round-trip and VERIFY the title. A stale entry (the item
+// moved after a library edit) can therefore only cost a slower miss + fallback
+// scan, never yield the wrong item. Cleared whenever the album index rebuilds.
+const browseOffsetCache = new Map();   // context -> Map(lowerTitle -> offset)
+function browseOffsetCtx(context) {
+  let m = browseOffsetCache.get(context);
+  if (!m) { m = new Map(); browseOffsetCache.set(context, m); }
+  return m;
+}
+function clearBrowseOffsetCache() { browseOffsetCache.clear(); }
+
 // Page through the current list level of `hierarchy` looking for an item
-// whose title matches (case-insensitive). Returns the item or null.
-async function findItemByTitle(sessionKey, hierarchy, title, maxScan) {
+// whose title matches (case-insensitive). Returns the item or null. When a
+// `context` is given, an offset cache short-circuits the scan (see above).
+async function findItemByTitle(sessionKey, hierarchy, title, maxScan, context) {
   const want = String(title).trim().toLowerCase();
   const limit = maxScan || 3000;
   const page = 100;
+  const cache = context ? browseOffsetCtx(context) : null;
+  // Fast path: jump straight to the remembered position and confirm the title.
+  if (cache && cache.has(want)) {
+    const off = cache.get(want);
+    try {
+      const r = await load({ hierarchy, offset: off, count: 1, multi_session_key: sessionKey });
+      const it = (r.items || [])[0];
+      if (it && (it.title || "").trim().toLowerCase() === want) return it;
+    } catch (e) { /* offset out of range / load blip — fall back to the scan */ }
+    cache.delete(want);   // the item moved — drop the stale hint and rescan
+  }
   for (let off = 0; off < limit; off += page) {
     const r = await load({ hierarchy, offset: off, count: page, multi_session_key: sessionKey });
     const items = r.items || [];
-    for (const it of items) {
-      if ((it.title || "").trim().toLowerCase() === want) return it;
+    for (let i = 0; i < items.length; i++) {
+      const t = (items[i].title || "").trim().toLowerCase();
+      if (cache && t) cache.set(t, off + i);   // remember every position we pass
+      if (t === want) return items[i];
     }
     const total = r.list && r.list.count ? r.list.count : 0;
     if (off + page >= total || items.length === 0) break;
@@ -373,11 +405,14 @@ async function navigateToAlbumList(sessionKey, filter) {
     // Optional parent: drill into the parent genre first, then find the
     // sub-genre by title inside it (e.g. Pop/Rock → Heavy Metal).
     if (filter.parent) {
-      const parent = await findItemByTitle(sessionKey, hierarchy, filter.parent);
+      const parent = await findItemByTitle(sessionKey, hierarchy, filter.parent, 3000, "genres:root");
       if (!parent) throw new Error(`Parent genre "${filter.parent}" not found`);
       await browse({ hierarchy, item_key: parent.item_key, multi_session_key: sessionKey });
     }
-    const genre = await findItemByTitle(sessionKey, hierarchy, filter.value);
+    // Top-level genres share the "genres:root" list; a sub-genre lives in its
+    // parent's child list, so its offset cache is namespaced by that parent.
+    const genreCtx = filter.parent ? "genres:parent:" + normalize(filter.parent) : "genres:root";
+    const genre = await findItemByTitle(sessionKey, hierarchy, filter.value, 3000, genreCtx);
     if (!genre) throw new Error(`Genre "${filter.value}" not found`);
     await browse({ hierarchy, item_key: genre.item_key, multi_session_key: sessionKey });
     const lvl = await loadLevel(sessionKey, hierarchy, 300);
@@ -404,7 +439,7 @@ async function navigateToAlbumList(sessionKey, filter) {
     const tagsNode = await findItemByTitle(sessionKey, hierarchy, "Tags", 100);
     if (!tagsNode) throw new Error('Couldn\'t find "Tags" under Library');
     await browse({ hierarchy, item_key: tagsNode.item_key, multi_session_key: sessionKey });
-    const tag = await findItemByTitle(sessionKey, hierarchy, filter.value);
+    const tag = await findItemByTitle(sessionKey, hierarchy, filter.value, 3000, "tags:root");
     if (!tag) throw new Error(`Tag "${filter.value}" not found`);
     const intoTag = await browse({ hierarchy, item_key: tag.item_key, multi_session_key: sessionKey });
     // Mixed-content tags expose an "Albums" child; album-only tags list albums
@@ -430,7 +465,7 @@ async function navigateToAlbumList(sessionKey, filter) {
     const hierarchy = "browse";
     const labelsNode = await findLabelsNode(sessionKey);
     await browse({ hierarchy, item_key: labelsNode.item_key, multi_session_key: sessionKey });
-    const label = await findItemByTitle(sessionKey, hierarchy, filter.value, 20000);
+    const label = await findItemByTitle(sessionKey, hierarchy, filter.value, 20000, "labels:root");
     if (!label) throw new Error(`Label "${filter.value}" not found`);
     const intoLabel = await browse({ hierarchy, item_key: label.item_key, multi_session_key: sessionKey });
     // A label may list its albums directly, or nest them under an "Albums"
@@ -2927,6 +2962,11 @@ function startIndexMaintenance() {
         ? (albumIndex.albums[0].title || "") + "||" + (albumIndex.albums[0].subtitle || "") : "";
       if (total !== albumIndex.count || (albumIndex.count > 0 && firstNow !== firstIdx)) {
         if (DEBUG) console.log("[index] library changed (count", albumIndex.count, "->", total, ") - rebuilding");
+        // A library edit (add/remove/reorder) shifts the genre/label/tag list
+        // positions too, so drop the browse offset cache — stale entries would
+        // still be caught by the title verify, but clearing avoids the wasted
+        // verify round-trip on the first play of each filter after a change.
+        clearBrowseOffsetCache();
         // Re-seed labelsIndex from the fresh album index too: its album offsets
         // are a snapshot, and a rebuild (reorder/add/remove) leaves them
         // pointing at the wrong albums for the labels browser + display grids.
