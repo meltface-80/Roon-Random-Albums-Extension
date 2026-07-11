@@ -4,7 +4,7 @@
 
 </div>
 
-# MusicD Remote (for Roon) - v1.6.31
+# MusicD Remote (for Roon) - v1.6.32
 
 MusicD Remote is for Roon and is a feature-rich music discovery companion for Roon, helping you rediscover your library through album browsing in a random order, with rich metadata, beautiful wall displays and seamless playback with Roon Server at the heart.
 
@@ -265,20 +265,22 @@ No billing account is needed — the free quota (10,000 units/day) comfortably c
 ## Install (Docker)
 
 ```bash
-sudo mkdir -p /opt/roon-random-albums
-cd /opt/roon-random-albums
-wget https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/v1.6.31/roon-random-albums-v1.6.31-docker.tar.gz
-tar -xzf roon-random-albums-v1.6.31-docker.tar.gz
-docker build -t roon-random-albums:1.6.31 .
+sudo mkdir -p /opt/musicd-remote
+cd /opt/musicd-remote
+wget https://github.com/meltface-80/MusicD-Remote/releases/download/v1.6.32/MusicD-Remote-v1.6.32.tar.gz
+tar -xzf MusicD-Remote-v1.6.32.tar.gz
+docker build -t musicd-remote:1.6.32 .
 docker run -d \
-  --name roon-random-albums \
+  --name musicd-remote \
   --restart unless-stopped \
   --network host \
   -v roon-random-albums-data:/app/data \
 # remove the below line (and this line) if you only use Qobuz/Tidal
   -v /your/path/to/Music:/music:ro \
-  roon-random-albums:1.6.31
+  musicd-remote:1.6.32
 ```
+
+> **Do not change `roon-random-albums-data`** — that volume name is an internal identifier that holds your Roon pairing, play history, and label cache. It keeps its original name on purpose: point any new install at the same volume and everything carries over. Rename it and Docker silently creates a fresh empty volume — new pairing, lost history.
 
 `--network host` is required so the extension can discover your Roon Core on the local network. The `-v roon-random-albums-data` flag mounts a named Docker volume so that your Roon pairing, play history, and label cache survive container rebuilds. The `-v .../Music:/music:ro` flag mounts your music directory read-only so the extension can read label tags directly from your files — this is optional but gives the most accurate label data. Adjust the path to match your music library location.
 
@@ -298,22 +300,25 @@ curl -sSL https://get.docker.com | sh
 
 ## Updating
 
+> **Coming from v1.6.31 or earlier (the Roon-Random-Albums days)?** One-time tidy-up: your existing container is still named `roon-random-albums`, so stop and remove THAT name first (`sudo docker stop roon-random-albums && sudo docker rm roon-random-albums`), and use the new `/opt/musicd-remote` folder below (the old `/opt/roon-random-albums` folder can be deleted afterwards). Your data volume is reused automatically — pairing and history survive.
+
+
 ```bash
-sudo docker stop roon-random-albums
-sudo docker rm roon-random-albums
-sudo rm -f /opt/roon-random-albums/roon-random-albums-vPREVIOUS-docker.tar.gz
-cd /opt/roon-random-albums
-wget https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/vNEW/roon-random-albums-vNEW-docker.tar.gz
-tar -xzf roon-random-albums-vNEW-docker.tar.gz
-docker build -t roon-random-albums:NEW .
+sudo docker stop musicd-remote
+sudo docker rm musicd-remote
+sudo rm -f /opt/musicd-remote/MusicD-Remote-vPREVIOUS.tar.gz
+cd /opt/musicd-remote
+wget https://github.com/meltface-80/MusicD-Remote/releases/download/vNEW/MusicD-Remote-vNEW.tar.gz
+tar -xzf MusicD-Remote-vNEW.tar.gz
+docker build -t musicd-remote:NEW .
 docker run -d \
-  --name roon-random-albums \
+  --name musicd-remote \
   --restart unless-stopped \
   --network host \
   -v roon-random-albums-data:/app/data \
 # remove the below line (and this line) if you only use Qobuz/Tidal
   -v /your/path/to/Music:/music:ro \
-  roon-random-albums:NEW
+  musicd-remote:NEW
 ```
 
 ## Migrating from a native install
@@ -326,21 +331,21 @@ sudo systemctl stop roon-random-albums
 sudo systemctl disable roon-random-albums
 
 # 2. Create the build directory and download the tarball
-sudo mkdir -p /opt/roon-random-albums
-cd /opt/roon-random-albums
-wget https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/v1.6.31/roon-random-albums-v1.6.31-docker.tar.gz
-tar -xzf roon-random-albums-v1.6.31-docker.tar.gz
+sudo mkdir -p /opt/musicd-remote
+cd /opt/musicd-remote
+wget https://github.com/meltface-80/MusicD-Remote/releases/download/v1.6.32/MusicD-Remote-v1.6.32.tar.gz
+tar -xzf MusicD-Remote-v1.6.32.tar.gz
 
 # 3. Build and run
-docker build -t roon-random-albums:1.6.31 .
+docker build -t musicd-remote:1.6.32 .
 docker run -d \
-  --name roon-random-albums \
+  --name musicd-remote \
   --restart unless-stopped \
   --network host \
   -v roon-random-albums-data:/app/data \
 # remove the below line (and this line) if you only use Qobuz/Tidal
   -v /your/path/to/Music:/music:ro \
-  roon-random-albums:1.6.31
+  musicd-remote:1.6.32
 ```
 
 Confirm the extension appears in **Roon → Settings → Extensions** before removing the old install.
@@ -385,12 +390,12 @@ You should see version information for both commands.
 Open Terminal and run:
 
 ```
-mkdir -p ~/roon-random-albums
-cd ~/roon-random-albums
-curl -L -o roon-random-albums-v1.6.31-docker.tar.gz \
-https://github.com/meltface-80/Roon-Random-Albums-Extension/releases/download/v1.6.31/roon-random-albums-v1.6.31-docker.tar.gz
-tar -xzf roon-random-albums-v1.6.31-docker.tar.gz
-docker build -t roon-random-albums:1.6.31 .
+mkdir -p ~/musicd-remote
+cd ~/musicd-remote
+curl -L -o MusicD-Remote-v1.6.32.tar.gz \
+https://github.com/meltface-80/MusicD-Remote/releases/download/v1.6.32/MusicD-Remote-v1.6.32.tar.gz
+tar -xzf MusicD-Remote-v1.6.32.tar.gz
+docker build -t musicd-remote:1.6.32 .
 ```
 
 ## 3. Run the container
@@ -398,25 +403,25 @@ If you use local music replace /Users/yourusername/Music with the folder contain
 
 ```
 docker run -d \
-  --name roon-random-albums \
+  --name musicd-remote \
   --restart unless-stopped \
   -p 3399:3399 \
   -e ROON_CORE_IP=<IP_OF_YOUR_ROON_CORE> \
   -v roon-random-albums-data:/app/data \
   -v /Users/yourusername/Music:/music:ro \
-  roon-random-albums:1.6.31
+  musicd-remote:1.6.32
 ```
 
 Or if you only use Qobuz or TIDAL
 
 ```
 docker run -d \
-  --name roon-random-albums \
+  --name musicd-remote \
   --restart unless-stopped \
   -p 3399:3399 \
   -e ROON_CORE_IP=<IP_OF_YOUR_ROON_CORE> \
   -v roon-random-albums-data:/app/data \
-  roon-random-albums:1.6.31
+  musicd-remote:1.6.32
 ```
 
 ## 4. Open the extension
@@ -437,7 +442,7 @@ Please let me know if you run into any trouble.
 Pass extra env vars with `-e` in the `docker run` command:
 
 ```bash
-docker run -d ... -e RRA_DEBUG=1 roon-random-albums:1.6.31
+docker run -d ... -e RRA_DEBUG=1 musicd-remote:1.6.32
 ```
 
 ### Album metadata sources
@@ -463,12 +468,12 @@ No keys required for basic operation. The extension pulls in external metadata f
 - **Labels page shows no logos**
   → Add your Discogs token and FanArt.tv key in Settings (gear icon), then tap Force rescan.
 - **Discogs token save doesn't stick**
-  → Ensure the field shows your token in plain text before tapping Save. If it still fails, check `docker logs roon-random-albums` for a confirmation line.
+  → Ensure the field shows your token in plain text before tapping Save. If it still fails, check `docker logs musicd-remote` for a confirmation line.
 
 ## File layout
 
 ```
-/opt/roon-random-albums/
+/opt/musicd-remote/
 ├── Dockerfile
 ├── .dockerignore
 ├── package.json
