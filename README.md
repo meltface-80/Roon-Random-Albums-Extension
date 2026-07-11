@@ -6,30 +6,218 @@
 
 # MusicD Companion for Roon - v1.6.30
 
-A web UI that shows a screenful of random albums from your Roon library, with instant whole-library search, playback actions targeting any zone, and more.
-
-> The Roon API does not let third-party code navigate the Roon app itself, so the album detail view (art, tracks, action buttons) is rendered inside this UI. Tapping **Play Now** still plays through Roon on the zone you select.
+MusicD Companion for Roon is a feature-rich music discovery companion for Roon, helping you rediscover your library through album browsing in a random order, with rich metadata, beautiful wall displays and seamless playback. 
 
 ---
 
 ## Features
 
-- **Home** — lands on curated rows instead of a single grid: albums you haven't played in 6 months (with a daily Album of the Day pick), a fresh random shuffle, the Label of the Week, and a Browse by Genre grid; tap any row's header to open its full-screen view, or jump to the classic random album wall any time from the menu
-- **Global search** — always available from the Home top bar; instant whole-library results (Artists, Labels, Albums) plus, as they load, matches from the Qobuz and Tidal catalogues (when connected — tap to open that service's browser ready to favourite) and from Pitchfork's recent reviews (tap for the score and a link to the review on pitchfork.com)
-- **Pitchfork magazine** — a full-page browser of Pitchfork album reviews (Latest Reviews + Best New Music) as a woven cover-art mosaic with scores and BNM badges; tap a review to read it on pitchfork.com, open the album in your library, or find it on Qobuz/Tidal
-- **Album detail** — full track listing with **individual track selection** (tap any track to play it now or add just that track to the queue), album play/queue actions, release year, label link, editorial review, and Pitchfork score where available; multiple artists are shown as individual tappable links; the view carries the Home screen's look with a blurred glow of the album cover behind the artwork
-- **Now Playing** — full-screen now-playing view that always fits your display (the album art scales to the space available), with transport controls, a Queue tab, and a one-tap Home button; bracketed track details get their own line
-- **Wall display** — a Roon-style always-on screen at `http://<server-ip>:3399/display` for any tablet or TV browser: follows the playing zone and rotates between album art, artist photos (FanArt.tv), an album review, an artist bio, "more from this artist / label" cover grids drawn from your own library (tap a cover to play or queue it), and the track's official music video, muted and synced (optional — needs a free YouTube API key). Tap the screen for mode chips to pin any view; a Nest-Hub-style progress strip sits along the bottom. On/off toggle and rotation-speed slider in Settings
-- **Play unheard** — one tap to find and play an album you haven't listened to in the last 12 months (including anything never played); falls back to pure random once your whole library has been heard recently
-- **Random Album Radio** — automatically queues a new random album when your queue runs dry, preferring albums not recently played
-- **Record labels** — browse your library by label, with logos from FanArt.tv and Discogs where available; includes Self-Released and Independent, plus a featured Label of the Week on Home
-- **Label merge** — consolidate duplicate or variant label tiles into one; undo individual merges at any time
-- **Multi-select** — long-press to select multiple album tiles and play or queue them all at once
-- **Filters** — narrow the random pool by genre, decade, tag, or label
-- **Artist view** — tap any artist name to see all their albums in your library
-- **Share card** — generates a 1200×600 PNG of the current album, ready to share
-- **In-app updater** — checks for new releases automatically; install with one tap from Settings
+🎵 Album Discovery
 
+* Browse your music library in a fresh and engaging way
+* Discover forgotten favourites and hidden gems
+* Random album selection with configurable filtering
+* Album of the day
+* Label of the week
+* Play Unheard albums
+* Recently unplayed album recommendations
+* Continue discovering music automatically with Random Album Radio
+
+Over time with prolonged use the database learns when you last listened to an album and will offer up others instead so you rediscover forgotten albums.
+
+⸻
+
+📚 Rich Library Browsing
+
+Browse your library in multiple ways:
+
+* Albums
+* Artists
+* Genres
+* Record Labels
+* Decades
+* Tags
+
+Quickly jump between related artists, albums and labels from anywhere in the application.
+
+⸻
+
+🔍 Powerful Search
+
+Search your music library instantly by:
+
+* Album
+* Artist
+* Record Label
+
+Optionally extend searches to supported streaming services including:
+
+* Qobuz
+* TIDAL
+
+Also browse Qobuz and Tidal directly and add favourites to your Roon library. 
+
+⸻
+
+💿 Detailed Album Pages
+
+Each album includes rich metadata including:
+
+* High resolution artwork
+* Track listing
+* Release year
+* Record label
+* Album duration
+* Multiple artist support
+* Pitchfork review and rating (where available)
+
+Play, queue or browse directly from the album page.
+
+⸻
+
+▶ Playback Integration
+
+Control playback directly from the extension.
+
+Features include:
+
+* Play album immediately
+* Queue album
+* Queue individual tracks
+* Multi-select albums
+* Queue multiple albums
+* Continue playback automatically when the queue finishes
+* Move queue between zones - zone switcher
+
+⸻
+
+📺 Full Screen Wall Display
+
+Turn a TV or tablet into a beautiful now-playing display.
+
+Features include:
+
+* Large album artwork
+* Artist photography
+* Album reviews
+* Artist biographies
+* Related albums
+* Related artists
+* Record label information
+* YouTube music videos
+* Playback progress
+* Automatic information rotation
+* Multiple display modes
+
+Ideal for dedicated listening rooms.
+YouTube videos, if suitable and available will play automatically at the start of a track but may not be in sync to the music.
+
+⸻
+
+🏷 Record Label Explorer
+
+Explore your collection by record label.
+
+Features include:
+
+* Label of the week
+* Label artwork
+* Discogs integration
+* FanArt.tv artwork
+* Label merging
+* Undo merged labels
+* Browse every release from a selected label
+
+⸻
+
+📻 Random Album Radio
+
+Automatically keeps the music flowing.
+
+When the current queue finishes the extension can automatically:
+
+* Select another album
+* Avoid recently played albums
+* Continue playback indefinitely
+
+Perfect for effortless album listening.
+
+⸻
+
+⭐ Artist Discovery
+
+Learn more about the music you’re listening to.
+
+Includes:
+
+* Artist biographies
+* Artist images
+* Related artists
+* Navigation between artists and albums
+
+⸻
+
+🌐 Online Integrations
+
+Supports information and artwork from:
+
+* Roon
+* Qobuz
+* TIDAL
+* Discogs
+* FanArt.tv
+* Pitchfork
+* YouTube
+
+⸻
+
+📤 Sharing
+
+Create attractive share cards for social media featuring:
+
+* Album artwork
+* Artist
+* Album title
+* Clean modern layout
+
+⸻
+
+🔄 Automatic Updates
+
+Stay up to date with the latest features.
+
+* Built-in update checker
+* GitHub release integration
+* One-click updates
+
+⸻
+
+🐳 Docker Support
+
+Designed for simple deployment.
+
+Includes:
+
+* Docker image
+* Docker Compose support
+* Persistent configuration
+* Automatic migration of pairing information
+* Simple upgrades
+
+⸻
+
+⚡ Modern Interface
+
+Designed specifically for large music libraries.
+
+* Responsive interface
+* Fast navigation
+* Mobile friendly
+* Desktop friendly
+* TV friendly
+* Dark/light themes
+* Clean album-first design
+  
 ---
 
 ## Setting up Discogs, FanArt.tv and YouTube API keys
