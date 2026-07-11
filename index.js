@@ -35,7 +35,7 @@ const REPO = (() => {
   const src = (pkg.repository && pkg.repository.url) || pkg.homepage || "";
   const m = /github\.com[/:]([^/]+)\/([^/.]+)/i.exec(src);
   return m ? { owner: m[1], repo: m[2] }
-           : { owner: "meltface-80", repo: "Roon-Random-Albums-Extension" };
+           : { owner: "meltface-80", repo: "MusicD-Remote" };
 })();
 const UPDATE_CHECK_MS = 168 * 60 * 60 * 1000; // re-check GitHub every 7 days
 const updater = createUpdater({

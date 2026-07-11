@@ -107,7 +107,7 @@ Do not commit with known CONFIRMED or PLAUSIBLE bugs. Fix them all in the same v
 
 ## Repository — branch + PR workflow
 
-- Develop on a **feature branch** of `meltface-80/Roon-Random-Albums-Extension` (e.g. `claude/<topic>`). Never commit directly to `main`.
+- Develop on a **feature branch** of `meltface-80/MusicD-Remote` (e.g. `claude/<topic>`). Never commit directly to `main`.
 - For each change: commit to the branch, build and **commit the tarball to the branch** (see below), push, and give the user the docker install command for the branch build. The user tests the branch build, then opens and merges the PR themselves.
 - **Never open or merge a pull request yourself** unless the user explicitly asks. The user merges.
 - After the user confirms the merge, update `README.md` version references and any other affected docs (see the README rule below).
@@ -138,7 +138,7 @@ that corrupted the archive.** The user downloads it byte-exact from GitHub raw.
 
 ```bash
 VERSION=$(node -p "require('./package.json').version")
-TARBALL="roon-random-albums-v${VERSION}-docker.tar.gz"
+TARBALL="MusicD-Remote-v${VERSION}.tar.gz"
 tar -czf "/tmp/${TARBALL}" \
   --exclude='./.git' \
   --exclude='./node_modules' \
@@ -147,7 +147,7 @@ tar -czf "/tmp/${TARBALL}" \
   --exclude='./*.tar.gz' \
   .
 cp "/tmp/${TARBALL}" "./${TARBALL}"
-git rm -q roon-random-albums-v<PREVIOUS>-docker.tar.gz   # drop the old branch tarball
+git rm -q MusicD-Remote-v<PREVIOUS>.tar.gz   # drop the old branch tarball
 git add "${TARBALL}"
 ```
 
@@ -172,7 +172,7 @@ The user manually publishes releases on GitHub when they are satisfied with test
 - The README contains version references (install commands, tarball URLs, `docker build` tags).
 - **Do not change any version number in README.md** unless the user explicitly says
   "promote to latest" or "update the README".
-- Current stable version in the README: **v1.6.31** (until the user says otherwise).
+- Current stable version in the README: **v1.6.32** (until the user says otherwise).
 - The extension is being renamed **MusicD Remote** ("for Roon" is descriptive, not part of the name). The Roon `extension_id` must NEVER change — it would force every user to re-authorize.
 
 ---
@@ -197,22 +197,27 @@ the tarball byte-exact from GitHub raw (no Dropbox). Drop the `/music` mount lin
 is testing a Qobuz/Tidal streaming-only scenario.
 
 ```bash
-sudo docker stop roon-random-albums
-sudo docker rm roon-random-albums
-sudo rm -f /opt/roon-random-albums/roon-random-albums-vPREVIOUS-docker.tar.gz
-cd /opt/roon-random-albums
-wget -O roon-random-albums-vNEW-docker.tar.gz \
-  "https://raw.githubusercontent.com/meltface-80/Roon-Random-Albums-Extension/refs/heads/<BRANCH>/roon-random-albums-vNEW-docker.tar.gz"
-file roon-random-albums-vNEW-docker.tar.gz   # expect: gzip compressed data
-tar -xzf roon-random-albums-vNEW-docker.tar.gz
-docker build -t roon-random-albums:NEW .
+sudo docker stop musicd-remote
+sudo docker rm musicd-remote
+sudo rm -f /opt/musicd-remote/MusicD-Remote-vPREVIOUS.tar.gz
+cd /opt/musicd-remote
+wget -O MusicD-Remote-vNEW.tar.gz \
+  "https://raw.githubusercontent.com/meltface-80/MusicD-Remote/refs/heads/<BRANCH>/MusicD-Remote-vNEW.tar.gz"
+file MusicD-Remote-vNEW.tar.gz   # expect: gzip compressed data
+tar -xzf MusicD-Remote-vNEW.tar.gz
+docker build -t musicd-remote:NEW .
 docker run -d \
-  --name roon-random-albums \
+  --name musicd-remote \
   --restart unless-stopped \
   --network host \
-  -v roon-random-albums-data:/app/data \
+  -v musicd-remote-data:/app/data \
   -v /mnt/dietpi_userdata/4tb/Music:/music:ro \
-  roon-random-albums:NEW
+  musicd-remote:NEW
+# NOTE: the volume holds the Roon pairing + history. New installs (and the
+# user's box, after the one-time v1.6.32 copy migration) use
+# musicd-remote-data; pre-v1.6.32 installs must copy roon-random-albums-data
+# into it once (see README Updating) — a wrong/renamed volume silently
+# starts empty (re-pairing, lost history).
 ```
 
 ---
@@ -262,4 +267,9 @@ docker run -d \
 | v1.6.15 | stable (superseded) | Performance pass: server art cache, index-served randoms, gzip, no scroll-jank blur, Home row reuse |
 | v1.6.16 | stable (superseded) | Roon pairing persisted on the data volume — no more duplicate extension authorizations per update |
 | v1.6.17–v1.6.20 | superseded | Wall display built out: /display page (rotating art/photos/review/bio/library grids/video), settings toggle + interval slider, precision YouTube matching, on-screen mode chips |
-| v1.6.21 | **Latest (stable)** | Wall display: per-track video reload, live-position sync, video-first behaviour, tappable Play/Queue library grids — README points here |
+| v1.6.21 | stable (superseded) | Wall display: per-track video reload, live-position sync, video-first behaviour, tappable Play/Queue library grids |
+| v1.6.22–v1.6.27 | superseded | Wall display refinements: per-credit artist bios, photo letterboxing, label-grid selectability (root-caused in .26), bio-cache bound |
+| v1.6.28–v1.6.29 | superseded | Instant Home reopen (PWA state kept); faster filtered-album playback |
+| v1.6.30 | superseded | FanArt key self-heal (purge cached misses on save); validated wall-display artist bios (Qobuz/Tidal-first, album cross-checked Wikipedia) |
+| v1.6.31 | stable (superseded) | Renamed to MusicD Remote in-app; updater follows GitHub repo-rename redirects |
+| v1.6.32 | **Latest (stable)** | Repo renamed to MusicD-Remote: new install paths/names, tarball renamed (docker suffix dropped), updater derives new repo — README points here |

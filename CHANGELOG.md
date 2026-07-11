@@ -2,6 +2,16 @@
 
 All notable changes to MusicD Remote (formerly Roon Random Albums) are documented here.
 
+## [1.6.32] — 2026-07-11
+
+### Changed
+- **The repository is now [`meltface-80/MusicD-Remote`](https://github.com/meltface-80/MusicD-Remote)** (renamed from `Roon-Random-Albums-Extension`), completing the v1.6.31 rename. GitHub redirects all old URLs, so existing installs keep updating; this build makes the new home native:
+  - The self-updater now derives the repo from `package.json` (which points at `MusicD-Remote`) instead of relying on redirects from the old hardcoded name; the fallback was updated too.
+  - **Release tarballs are renamed**: `MusicD-Remote-vX.Y.Z.tar.gz` (the `-docker` suffix is gone — Docker is the only install method).
+  - **README install instructions rewritten** for the new names: install folder `/opt/musicd-remote` (macOS: `~/musicd-remote`), image/container `musicd-remote`, and — for new installs — the data volume `musicd-remote-data`. Installs upgrading from v1.6.31 or earlier keep their Roon pairing, play history, and label cache by moving the old `roon-random-albums-data` volume once (a one-time `cp -a` copy container, documented in the README's Updating section, with a bold warning that skipping it means re-pairing and lost history).
+  - The Settings "View on GitHub" link points at the new repository.
+- No functional changes to the app itself.
+
 ## [1.6.31] — 2026-07-11
 
 ### Changed
