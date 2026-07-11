@@ -3706,8 +3706,8 @@
         if (s && s.current) {
           const parts = (s.current || "").split(".");
           versionEl.textContent = parts.length >= 3
-            ? "MusicD Companion v" + parts[0] + "." + parts[1] + " (Build " + parts[2] + ")"
-            : "MusicD Companion v" + s.current;
+            ? "MusicD Remote v" + parts[0] + "." + parts[1] + " (Build " + parts[2] + ")"
+            : "MusicD Remote v" + s.current;
           versionLoaded = true;
         }
       }
