@@ -210,11 +210,14 @@ docker run -d \
   --name musicd-remote \
   --restart unless-stopped \
   --network host \
-  -v roon-random-albums-data:/app/data \
+  -v musicd-remote-data:/app/data \
   -v /mnt/dietpi_userdata/4tb/Music:/music:ro \
   musicd-remote:NEW
-# NOTE: the volume name roon-random-albums-data is a permanent internal
-# identifier (holds Roon pairing + history) — NEVER rename it.
+# NOTE: the volume holds the Roon pairing + history. New installs (and the
+# user's box, after the one-time v1.6.32 copy migration) use
+# musicd-remote-data; pre-v1.6.32 installs must copy roon-random-albums-data
+# into it once (see README Updating) — a wrong/renamed volume silently
+# starts empty (re-pairing, lost history).
 ```
 
 ---

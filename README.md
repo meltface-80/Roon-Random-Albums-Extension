@@ -274,15 +274,15 @@ docker run -d \
   --name musicd-remote \
   --restart unless-stopped \
   --network host \
-  -v roon-random-albums-data:/app/data \
+  -v musicd-remote-data:/app/data \
 # remove the below line (and this line) if you only use Qobuz/Tidal
   -v /your/path/to/Music:/music:ro \
   musicd-remote:1.6.32
 ```
 
-> **Do not change `roon-random-albums-data`** — that volume name is an internal identifier that holds your Roon pairing, play history, and label cache. It keeps its original name on purpose: point any new install at the same volume and everything carries over. Rename it and Docker silently creates a fresh empty volume — new pairing, lost history.
+> **The `musicd-remote-data` volume holds your Roon pairing, play history, and label cache — never rename it once created.** Point every future `docker run` at the same name and everything carries over; a different name makes Docker silently create a fresh empty volume (new pairing, lost history). **Upgrading from v1.6.31 or earlier?** Your data lives in the old `roon-random-albums-data` volume — move it once with the copy step in [Updating](#updating) below before using this command.
 
-`--network host` is required so the extension can discover your Roon Core on the local network. The `-v roon-random-albums-data` flag mounts a named Docker volume so that your Roon pairing, play history, and label cache survive container rebuilds. The `-v .../Music:/music:ro` flag mounts your music directory read-only so the extension can read label tags directly from your files — this is optional but gives the most accurate label data. Adjust the path to match your music library location.
+`--network host` is required so the extension can discover your Roon Core on the local network. The `-v musicd-remote-data` flag mounts a named Docker volume so that your Roon pairing, play history, and label cache survive container rebuilds. The `-v .../Music:/music:ro` flag mounts your music directory read-only so the extension can read label tags directly from your files — this is optional but gives the most accurate label data. Adjust the path to match your music library location.
 
 You should see the extension appear in **Roon → Settings → Extensions** under **MusicD**. Click **Enable**, then browse to `http://<your-server-ip>:3399`.
 
@@ -300,7 +300,19 @@ curl -sSL https://get.docker.com | sh
 
 ## Updating
 
-> **Coming from v1.6.31 or earlier (the Roon-Random-Albums days)?** One-time tidy-up: your existing container is still named `roon-random-albums`, so stop and remove THAT name first (`sudo docker stop roon-random-albums && sudo docker rm roon-random-albums`), and use the new `/opt/musicd-remote` folder below (the old `/opt/roon-random-albums` folder can be deleted afterwards). Your data volume is reused automatically — pairing and history survive.
+> **Coming from v1.6.31 or earlier (the Roon-Random-Albums days)?** Two one-time steps before the update commands below:
+>
+> 1. **Stop and remove the old container name**: `sudo docker stop roon-random-albums && sudo docker rm roon-random-albums` (and use the new `/opt/musicd-remote` folder below — the old `/opt/roon-random-albums` folder can be deleted afterwards).
+> 2. **Move your data to the new volume name** — your Roon pairing, play history, and label cache live in the old `roon-random-albums-data` volume; copy them once into `musicd-remote-data`:
+>
+> ```bash
+> sudo docker run --rm \
+>   -v roon-random-albums-data:/from \
+>   -v musicd-remote-data:/to \
+>   alpine sh -c "cp -a /from/. /to/"
+> ```
+>
+> Skip step 2 and the new container starts with an empty volume: Roon asks you to authorize again and your history is gone. (Once you've confirmed everything carried over, the old volume can be removed with `sudo docker volume rm roon-random-albums-data`.)
 
 
 ```bash
@@ -315,7 +327,7 @@ docker run -d \
   --name musicd-remote \
   --restart unless-stopped \
   --network host \
-  -v roon-random-albums-data:/app/data \
+  -v musicd-remote-data:/app/data \
 # remove the below line (and this line) if you only use Qobuz/Tidal
   -v /your/path/to/Music:/music:ro \
   musicd-remote:NEW
@@ -342,7 +354,7 @@ docker run -d \
   --name musicd-remote \
   --restart unless-stopped \
   --network host \
-  -v roon-random-albums-data:/app/data \
+  -v musicd-remote-data:/app/data \
 # remove the below line (and this line) if you only use Qobuz/Tidal
   -v /your/path/to/Music:/music:ro \
   musicd-remote:1.6.32
@@ -407,7 +419,7 @@ docker run -d \
   --restart unless-stopped \
   -p 3399:3399 \
   -e ROON_CORE_IP=<IP_OF_YOUR_ROON_CORE> \
-  -v roon-random-albums-data:/app/data \
+  -v musicd-remote-data:/app/data \
   -v /Users/yourusername/Music:/music:ro \
   musicd-remote:1.6.32
 ```
@@ -420,7 +432,7 @@ docker run -d \
   --restart unless-stopped \
   -p 3399:3399 \
   -e ROON_CORE_IP=<IP_OF_YOUR_ROON_CORE> \
-  -v roon-random-albums-data:/app/data \
+  -v musicd-remote-data:/app/data \
   musicd-remote:1.6.32
 ```
 
