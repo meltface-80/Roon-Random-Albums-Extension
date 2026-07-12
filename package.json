@@ -1,6 +1,6 @@
 {
   "name": "musicd-remote",
-  "version": "1.6.34",
+  "version": "1.6.35",
   "description": "Display a screenful of random albums from your Roon library, with instant whole-library search, Play / Queue actions, and in-app self-update from GitHub.",
   "license": "MIT",
   "author": "Lewis Menzies (Music Duck / MusicD)",
@@ -19,12 +19,12 @@
     "compression": "^1.7.4",
     "express": "^4.19.2",
     "music-metadata": "^11.13.0",
-    "node-roon-api": "github:RoonLabs/node-roon-api",
-    "node-roon-api-browse": "github:RoonLabs/node-roon-api-browse",
-    "node-roon-api-image": "github:RoonLabs/node-roon-api-image",
-    "node-roon-api-settings": "github:RoonLabs/node-roon-api-settings",
-    "node-roon-api-status": "github:RoonLabs/node-roon-api-status",
-    "node-roon-api-transport": "github:RoonLabs/node-roon-api-transport"
+    "node-roon-api": "github:RoonLabs/node-roon-api#055dae6c2ac45b6c738aa3b9e5ac1fd722ed60e8",
+    "node-roon-api-browse": "github:RoonLabs/node-roon-api-browse#98adcbaba3a30fd6ce109c1f04cd361536143222",
+    "node-roon-api-image": "github:RoonLabs/node-roon-api-image#a5f0efaf2dfb5457e91abe326c3a40d865131d32",
+    "node-roon-api-settings": "github:RoonLabs/node-roon-api-settings#67cd8ca156c5bcd01ea63833ceaaec6d6a79654d",
+    "node-roon-api-status": "github:RoonLabs/node-roon-api-status#504c918d6da267e03fbb4337befa71ca3d3c7526",
+    "node-roon-api-transport": "github:RoonLabs/node-roon-api-transport#2ee60008a4cdb90c34ff3de58bb4b949067f1d20"
   },
   "overrides": {
     "node-roon-api": {

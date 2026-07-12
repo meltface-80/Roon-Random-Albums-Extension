@@ -131,8 +131,11 @@ const roon = new RoonApi({
     core = null; zones = {}; outputs = {};
     Object.keys(zonePrevState).forEach(k => delete zonePrevState[k]);
     stopIndexMaintenance();
-    albumIndex.albums = []; albumIndex.count = 0;
-    albumIndex.builtAt = 0; albumIndex.progress = 0;
+    // The album index is deliberately KEPT across an unpair: it's plain
+    // offset/title data (no session-scoped item_keys), so it stays usable for
+    // search while disconnected, and startIndexMaintenance() re-verifies it on
+    // re-pair with a cheap 2-call probe instead of a full library re-walk —
+    // a flapping connection no longer multiplies full rescans onto the Core.
     _statusPair = "Not paired with any Roon Core"; _statusPairErr = true; pushStatus();
   }
 });
@@ -291,6 +294,46 @@ function getImage(image_key, opts) {
       err ? reject(new Error(typeof err === "string" ? err : JSON.stringify(err)))
           : resolve({ content_type, body }));
   });
+}
+
+// ---------------------------------------------------------------------------
+// Browse session keys — pooled, not minted per operation.
+//
+// Roon's browse service keeps server-side state for every multi_session_key
+// for as long as the extension stays connected. The old scheme created a
+// fresh random key for every single operation (including the 5-minute index
+// probe — ~288/day at idle) and never told the Core about them again, so a
+// long-lived Core accumulated thousands of orphaned browse sessions. Keys are
+// now checked out of a small free-list and returned when the operation
+// finishes: the number of sessions the Core ever holds equals the PEAK number
+// of simultaneous operations (single digits), not the number of operations
+// ever run. Reuse is safe because every operation begins by re-navigating its
+// hierarchy (pop_all / fresh navigation), which discards any leftover state
+// on that key — and item_keys are never held across operations (see
+// pickRandomAlbums / loadAlbumSession).
+// ---------------------------------------------------------------------------
+const browseSessionFree = [];
+let browseSessionSeq = 0;
+function acquireBrowseSession() {
+  return browseSessionFree.pop() || ("rra_s" + (++browseSessionSeq));
+}
+function releaseBrowseSession(key) {
+  // Only withBrowseSession's finally calls this — exactly once per acquire —
+  // so a key can never enter the pool twice. Keep it that way: releasing a
+  // key twice would let two concurrent operations share a session and corrupt
+  // each other's browse state.
+  if (key) browseSessionFree.push(key);
+}
+// All Roon browse work runs through here. Per-operation attribution in the
+// DEBUG logs comes from the [browse]/[load] lines (they print the full opts,
+// including the pooled key), so the key itself doesn't need to carry it.
+async function withBrowseSession(fn) {
+  const sessionKey = acquireBrowseSession();
+  try {
+    return await fn(sessionKey);
+  } finally {
+    releaseBrowseSession(sessionKey);
+  }
 }
 
 
@@ -498,8 +541,6 @@ async function navigateToAlbumList(sessionKey, filter) {
 // Optionally constrained to a genre or tag (see navigateToAlbumList).
 // ---------------------------------------------------------------------------
 async function pickRandomAlbums(count, filter) {
-  const sessionKey = "rra_pick_" + Math.random().toString(36).slice(2, 10);
-
   // Decade filter has no Roon list to navigate — pick from the in-memory album
   // index filtered by the release year collected during scanning. Each record's
   // `offset` is its full-library position (resolved on open via filter=null).
@@ -541,43 +582,46 @@ async function pickRandomAlbums(count, filter) {
     return { albums, total: pool.length };
   }
 
-  const nav = await navigateToAlbumList(sessionKey, filter || null);
-  const total = nav.total;
-  if (total === 0) return { albums: [], total: 0 };
+  // Live browse path (filtered, or index still empty) — needs a Roon session.
+  return withBrowseSession(async (sessionKey) => {
+    const nav = await navigateToAlbumList(sessionKey, filter || null);
+    const total = nav.total;
+    if (total === 0) return { albums: [], total: 0 };
 
-  const want = Math.min(count, total);
-  const picked = new Set();
-  while (picked.size < want) picked.add(Math.floor(Math.random() * total));
-  const offsets = [...picked];
+    const want = Math.min(count, total);
+    const picked = new Set();
+    while (picked.size < want) picked.add(Math.floor(Math.random() * total));
+    const offsets = [...picked];
 
-  // Loaded in small concurrent batches (not fully sequential, not unbounded) —
-  // this endpoint is re-fetched on every Home visit, so a fully sequential loop
-  // here meant ~30 serialized Roon round-trips on every single visit.
-  const RANDOM_LOAD_BATCH = 8;
-  const albums = [];
-  for (let i = 0; i < offsets.length; i += RANDOM_LOAD_BATCH) {
-    const batch = offsets.slice(i, i + RANDOM_LOAD_BATCH);
-    const results = await Promise.allSettled(batch.map(off => load({
-      hierarchy: nav.hierarchy, offset: off, count: 1, multi_session_key: sessionKey
-    })));
-    results.forEach((res, idx) => {
-      const off = batch[idx];
-      if (res.status !== "fulfilled") {
-        if (DEBUG) console.error("load offset", off, "failed:", res.reason && res.reason.message);
-        return;
-      }
-      const item = res.value.items && res.value.items[0];
-      if (item && item.hint !== "header") {
-        albums.push({
-          offset:    off,
-          title:     item.title || "",
-          subtitle:  item.subtitle || "",
-          image_key: item.image_key || null
-        });
-      }
-    });
-  }
-  return { albums, total };
+    // Loaded in small concurrent batches (not fully sequential, not unbounded) —
+    // this endpoint is re-fetched on every Home visit, so a fully sequential loop
+    // here meant ~30 serialized Roon round-trips on every single visit.
+    const RANDOM_LOAD_BATCH = 8;
+    const albums = [];
+    for (let i = 0; i < offsets.length; i += RANDOM_LOAD_BATCH) {
+      const batch = offsets.slice(i, i + RANDOM_LOAD_BATCH);
+      const results = await Promise.allSettled(batch.map(off => load({
+        hierarchy: nav.hierarchy, offset: off, count: 1, multi_session_key: sessionKey
+      })));
+      results.forEach((res, idx) => {
+        const off = batch[idx];
+        if (res.status !== "fulfilled") {
+          if (DEBUG) console.error("load offset", off, "failed:", res.reason && res.reason.message);
+          return;
+        }
+        const item = res.value.items && res.value.items[0];
+        if (item && item.hint !== "header") {
+          albums.push({
+            offset:    off,
+            title:     item.title || "",
+            subtitle:  item.subtitle || "",
+            image_key: item.image_key || null
+          });
+        }
+      });
+    }
+    return { albums, total };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -619,10 +663,9 @@ async function pickSmartAlbum() {
 // Shared drill-in for album-level AND per-track actions: navigate to the
 // album list this offset belongs to, re-resolve the album's session item_key,
 // open it, and load its contents. item_keys are session-scoped, so every
-// request must rebuild this state from scratch.
-async function loadAlbumSession(offset, filter) {
-  const sessionKey = "rra_open_" + Math.random().toString(36).slice(2, 10);
-
+// request must rebuild this state from scratch. The caller owns the pooled
+// sessionKey (acquired via withBrowseSession) and releases it when done.
+async function loadAlbumSession(sessionKey, offset, filter) {
   // 1) Navigate to the album list this offset belongs to (full library, or a
   //    genre/tag list when a filter is active — offsets are per-list). Decade
   //    offsets are full-library positions, so resolve them against the full
@@ -674,7 +717,7 @@ async function loadAlbumSession(offset, filter) {
        i.hint === "action_list" && !i.subtitle
   );
 
-  return { sessionKey, hierarchy, albumItem, items, playMenu };
+  return { hierarchy, albumItem, items, playMenu };
 }
 
 // A track = an item that isn't the play menu, a no-subtitle submenu
@@ -693,46 +736,48 @@ function stripTrackNumber(title) {
 }
 
 async function openAlbumByOffset(offset, zoneOrOutputId, invokeKind, filter) {
-  const { sessionKey, hierarchy, albumItem, items, playMenu } =
-    await loadAlbumSession(offset, filter);
+  return withBrowseSession(async (sessionKey) => {
+    const { hierarchy, albumItem, items, playMenu } =
+      await loadAlbumSession(sessionKey, offset, filter);
 
-  const albumInfo = {
-    title:     albumItem.title || "",
-    subtitle:  albumItem.subtitle || "",
-    image_key: albumItem.image_key || null
-  };
+    const albumInfo = {
+      title:     albumItem.title || "",
+      subtitle:  albumItem.subtitle || "",
+      image_key: albumItem.image_key || null
+    };
 
-  const tracks = items
-    .filter(t => isTrackItem(t, playMenu))
-    .map(t => ({
-      title:    stripTrackNumber(t.title),
-      subtitle: t.subtitle || ""
-    }));
+    const tracks = items
+      .filter(t => isTrackItem(t, playMenu))
+      .map(t => ({
+        title:    stripTrackNumber(t.title),
+        subtitle: t.subtitle || ""
+      }));
 
-  let actions = [];
-  if (playMenu) {
-    actions = await drillActionMenu(hierarchy, sessionKey, playMenu.item_key);
-  }
-
-  // 7) Optionally invoke one
-  let invoked = null;
-  if (invokeKind) {
-    const action = matchAction(actions, invokeKind);
-    if (!action) {
-      throw new Error("No matching action for '" + invokeKind +
-                      "'. Available: " + actions.map(a => a.title).join(", "));
+    let actions = [];
+    if (playMenu) {
+      actions = await drillActionMenu(hierarchy, sessionKey, playMenu.item_key);
     }
-    if (!zoneOrOutputId) throw new Error("zone_or_output_id required to invoke an action");
-    await browse({
-      hierarchy,
-      item_key:  action.item_key,
-      zone_or_output_id: zoneOrOutputId,
-      multi_session_key: sessionKey
-    });
-    invoked = action.title;
-  }
 
-  return { album: albumInfo, tracks, actions, invoked };
+    // 7) Optionally invoke one
+    let invoked = null;
+    if (invokeKind) {
+      const action = matchAction(actions, invokeKind);
+      if (!action) {
+        throw new Error("No matching action for '" + invokeKind +
+                        "'. Available: " + actions.map(a => a.title).join(", "));
+      }
+      if (!zoneOrOutputId) throw new Error("zone_or_output_id required to invoke an action");
+      await browse({
+        hierarchy,
+        item_key:  action.item_key,
+        zone_or_output_id: zoneOrOutputId,
+        multi_session_key: sessionKey
+      });
+      invoked = action.title;
+    }
+
+    return { album: albumInfo, tracks, actions, invoked };
+  });
 }
 
 function classifyAction(title) {
@@ -775,38 +820,40 @@ async function drillActionMenu(hierarchy, sessionKey, itemKey) {
 // title rather than firing whatever now sits at that index; if the title is
 // gone entirely the caller gets a stale error (route maps it to 409).
 async function invokeTrackAction(offset, trackIndex, trackTitle, zoneOrOutputId, kind, filter) {
-  const { sessionKey, hierarchy, items, playMenu } = await loadAlbumSession(offset, filter);
-  const trackItems = items.filter(t => isTrackItem(t, playMenu));
+  return withBrowseSession(async (sessionKey) => {
+    const { hierarchy, items, playMenu } = await loadAlbumSession(sessionKey, offset, filter);
+    const trackItems = items.filter(t => isTrackItem(t, playMenu));
 
-  const wanted = normalize(trackTitle || "");
-  let item = trackItems[trackIndex];
-  if (!item || (wanted && normalize(stripTrackNumber(item.title)) !== wanted)) {
-    item = wanted
-      ? trackItems.find(t => normalize(stripTrackNumber(t.title)) === wanted)
-      : null;
-  }
-  if (!item) {
-    const err = new Error("Track list changed — close and reopen the album");
-    err.stale = true;
-    throw err;
-  }
+    const wanted = normalize(trackTitle || "");
+    let item = trackItems[trackIndex];
+    if (!item || (wanted && normalize(stripTrackNumber(item.title)) !== wanted)) {
+      item = wanted
+        ? trackItems.find(t => normalize(stripTrackNumber(t.title)) === wanted)
+        : null;
+    }
+    if (!item) {
+      const err = new Error("Track list changed — close and reopen the album");
+      err.stale = true;
+      throw err;
+    }
 
-  // Tapping a track opens its own action submenu (Play Now / Add Next /
-  // Queue / Start Radio…) — same drill as the album's Play menu.
-  const actions = await drillActionMenu(hierarchy, sessionKey, item.item_key);
+    // Tapping a track opens its own action submenu (Play Now / Add Next /
+    // Queue / Start Radio…) — same drill as the album's Play menu.
+    const actions = await drillActionMenu(hierarchy, sessionKey, item.item_key);
 
-  const action = matchAction(actions, kind);
-  if (!action) {
-    throw new Error("No matching action for '" + kind +
-                    "'. Available: " + actions.map(a => a.title).join(", "));
-  }
-  await browse({
-    hierarchy,
-    item_key:  action.item_key,
-    zone_or_output_id: zoneOrOutputId,
-    multi_session_key: sessionKey
+    const action = matchAction(actions, kind);
+    if (!action) {
+      throw new Error("No matching action for '" + kind +
+                      "'. Available: " + actions.map(a => a.title).join(", "));
+    }
+    await browse({
+      hierarchy,
+      item_key:  action.item_key,
+      zone_or_output_id: zoneOrOutputId,
+      multi_session_key: sessionKey
+    });
+    return { invoked: action.title, track: stripTrackNumber(item.title) };
   });
-  return { invoked: action.title, track: stripTrackNumber(item.title) };
 }
 
 // ---------------------------------------------------------------------------
@@ -2980,8 +3027,7 @@ async function buildAlbumIndex() {
   if (albumIndex.building) return albumIndex.building;
 
   albumIndex.progress = 0;
-  albumIndex.building = (async () => {
-    const sessionKey = "rra_idx_" + Math.random().toString(36).slice(2, 10);
+  albumIndex.building = withBrowseSession(async (sessionKey) => {
     await browse({ hierarchy: "albums", pop_all: true, multi_session_key: sessionKey });
     const head = await load({ hierarchy: "albums", offset: 0, count: 1, multi_session_key: sessionKey });
     const total = head.list && head.list.count ? head.list.count : 0;
@@ -3007,7 +3053,7 @@ async function buildAlbumIndex() {
     albumIndex.progress = 1;
     if (DEBUG) console.log("[index] built", albumIndex.count, "albums");
     return albumIndex;
-  })();
+  });
 
   try {
     return await albumIndex.building;
@@ -3016,12 +3062,19 @@ async function buildAlbumIndex() {
   }
 }
 
+// Single definition of index freshness, shared by ensureAlbumIndex (rebuild
+// trigger) and startIndexMaintenance (re-pair probe-vs-rebuild choice) so the
+// two paths can never disagree about when a rebuild is due.
+function isIndexFresh() {
+  return albumIndex.count > 0 && albumIndex.builtAt > 0 &&
+         (Date.now() - albumIndex.builtAt) <= INDEX_MAX_AGE_MS;
+}
+
 // Ensure a usable index exists; (re)build if empty or stale. Awaits only the
 // very first build (so the first search returns results); a stale rebuild
 // happens in the background while the current index keeps serving.
 async function ensureAlbumIndex() {
-  const stale = !albumIndex.builtAt || (Date.now() - albumIndex.builtAt) > INDEX_MAX_AGE_MS;
-  if ((albumIndex.count === 0 || stale) && !albumIndex.building) {
+  if (!isIndexFresh() && !albumIndex.building) {
     buildAlbumIndex().catch(e => { if (DEBUG) console.error("[index] build failed:", e.message); });
   }
   if (albumIndex.count === 0 && albumIndex.building) {
@@ -3029,29 +3082,35 @@ async function ensureAlbumIndex() {
   }
 }
 
-// Background maintenance: build now, then periodically check the album count.
-// If it changed, the library was edited and offsets may have shifted, so we
-// rebuild. Started on pairing, stopped on unpairing.
-function startIndexMaintenance() {
-  stopIndexMaintenance();
-  buildAlbumIndex()
-    .then(() => seedLabelsFromCache())
-    .catch(e => { if (DEBUG) console.error("[index] initial build:", e.message); });
-  indexMaintTimer = setInterval(async () => {
-    if (!core || albumIndex.building) return;
-    try {
-      const sessionKey = "rra_idxchk_" + Math.random().toString(36).slice(2, 10);
+// One cheap library-change probe: 2-3 Roon round-trips (count + the first
+// and last albums' identities), triggering a full rebuild only when something
+// actually changed. Runs on the 5-minute maintenance interval AND once on
+// re-pair (instead of the unconditional full re-walk re-pairing used to cost).
+async function checkIndexChanged() {
+  if (!core || albumIndex.building) return;
+  try {
+    await withBrowseSession(async (sessionKey) => {
       await browse({ hierarchy: "albums", pop_all: true, multi_session_key: sessionKey });
       const head = await load({ hierarchy: "albums", offset: 0, count: 1, multi_session_key: sessionKey });
       const total = head.list && head.list.count ? head.list.count : 0;
       // A count-neutral edit (retag that reorders the list) shifts offsets
-      // without changing the total — compare the first album's identity too,
-      // since a reorder almost always changes who sorts first.
+      // without changing the total — compare the FIRST and LAST albums'
+      // identities too. First alone missed count-neutral edits deeper in the
+      // list (an add+remove pair, a mid-list re-sort); checking both ends
+      // costs one extra load per probe and catches almost all of them. This
+      // matters doubly since re-pairing now relies on this probe instead of
+      // an unconditional full rebuild.
+      const identity = it => it ? (it.title || "") + "||" + (it.subtitle || "") : "";
       const first = head.items && head.items[0];
-      const firstNow = first ? (first.title || "") + "||" + (first.subtitle || "") : "";
-      const firstIdx = albumIndex.albums[0]
-        ? (albumIndex.albums[0].title || "") + "||" + (albumIndex.albums[0].subtitle || "") : "";
-      if (total !== albumIndex.count || (albumIndex.count > 0 && firstNow !== firstIdx)) {
+      const firstNow = identity(first);
+      const firstIdx = identity(albumIndex.albums[0]);
+      let lastChanged = false;
+      if (total > 1 && albumIndex.count > 1 && total === albumIndex.count) {
+        const tail = await load({ hierarchy: "albums", offset: total - 1, count: 1, multi_session_key: sessionKey });
+        const last = tail.items && tail.items[0];
+        lastChanged = identity(last) !== identity(albumIndex.albums[albumIndex.count - 1]);
+      }
+      if (total !== albumIndex.count || (albumIndex.count > 0 && firstNow !== firstIdx) || lastChanged) {
         if (DEBUG) console.log("[index] library changed (count", albumIndex.count, "->", total, ") - rebuilding");
         // A library edit (add/remove/reorder) shifts the genre/label/tag list
         // positions too, so drop the browse offset cache — stale entries would
@@ -3065,8 +3124,27 @@ function startIndexMaintenance() {
           .then(() => rebuildLabelsMap())
           .catch(() => { /* build error already logged by buildAlbumIndex */ });
       }
-    } catch (e) { /* browse/load probe failed — next maintenance tick will retry */ }
-  }, INDEX_CHECK_MS);
+    });
+  } catch (e) { /* browse/load probe failed — next maintenance tick will retry */ }
+}
+
+// Background maintenance: build (or verify) now, then probe for library edits
+// periodically. Started on pairing, stopped on unpairing.
+function startIndexMaintenance() {
+  stopIndexMaintenance();
+  // The index survives an unpair (see core_unpaired), so a re-pair with a
+  // recent index only needs the cheap probe to confirm it, not a full
+  // library re-walk. This matters when the Core itself is struggling: its
+  // GC pauses drop the connection, and the old unconditional rescan then
+  // hit the recovering Core with a full library walk on every re-pair.
+  if (isIndexFresh()) {
+    checkIndexChanged();
+  } else {
+    buildAlbumIndex()
+      .then(() => seedLabelsFromCache())
+      .catch(e => { if (DEBUG) console.error("[index] initial build:", e.message); });
+  }
+  indexMaintTimer = setInterval(checkIndexChanged, INDEX_CHECK_MS);
 }
 function stopIndexMaintenance() {
   if (indexMaintTimer) { clearInterval(indexMaintTimer); indexMaintTimer = null; }
@@ -3734,8 +3812,7 @@ const genreGroupsCache = makeTtlCache(30 * 60 * 1000);
 app.get("/api/home/genre-groups", async (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
   try {
-    const data = await genreGroupsCache.get("groups", async () => {
-      const sessionKey = "rra_grp_" + Math.random().toString(36).slice(2, 10);
+    const data = await genreGroupsCache.get("groups", () => withBrowseSession(async (sessionKey) => {
       await browse({ hierarchy: "genres", pop_all: true, multi_session_key: sessionKey });
       // Find the Pop/Rock parent (tolerant of spacing/naming).
       const top = await loadLevel(sessionKey, "genres", 1000);
@@ -3780,7 +3857,7 @@ app.get("/api/home/genre-groups", async (req, res) => {
       const byCount = (a, b) => (b.count || 0) - (a.count || 0);
       pop.sort(byCount); rockmetal.sort(byCount);
       return { parent: parentTitle, pop, rockmetal };
-    });
+    }));
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3790,27 +3867,28 @@ app.get("/api/home/genre-groups", async (req, res) => {
 // Available genres (top level of the "genres" hierarchy).
 app.get("/api/filters/genres", async (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
-  const sessionKey = "rra_gen_" + Math.random().toString(36).slice(2, 10);
   try {
-    await browse({ hierarchy: "genres", pop_all: true, multi_session_key: sessionKey });
-    const lvl = await loadLevel(sessionKey, "genres", 1000);
-    // Keep only genres that actually contain albums, biggest first — Roon
-    // reports the count in the subtitle (e.g. "12 Albums"). If no subtitle
-    // parses (format differs from expected), fall back to the raw list so
-    // the feature degrades instead of going empty.
-    const parsed = lvl.items
-      .filter(i => i.hint !== "header" && i.title)
-      .map(i => ({
-        title: i.title,
-        subtitle: i.subtitle || "",
-        count: parseAlbumCount(i.subtitle)
-      }));
-    const anyParsed = parsed.some(g => g.count !== null);
-    const genres = (anyParsed
-      ? parsed.filter(g => g.count !== null && g.count > 0)
-              .sort((a, b) => b.count - a.count)
-      : parsed
-    ).map(g => ({ title: g.title, subtitle: g.subtitle }));
+    const genres = await withBrowseSession(async (sessionKey) => {
+      await browse({ hierarchy: "genres", pop_all: true, multi_session_key: sessionKey });
+      const lvl = await loadLevel(sessionKey, "genres", 1000);
+      // Keep only genres that actually contain albums, biggest first — Roon
+      // reports the count in the subtitle (e.g. "12 Albums"). If no subtitle
+      // parses (format differs from expected), fall back to the raw list so
+      // the feature degrades instead of going empty.
+      const parsed = lvl.items
+        .filter(i => i.hint !== "header" && i.title)
+        .map(i => ({
+          title: i.title,
+          subtitle: i.subtitle || "",
+          count: parseAlbumCount(i.subtitle)
+        }));
+      const anyParsed = parsed.some(g => g.count !== null);
+      return (anyParsed
+        ? parsed.filter(g => g.count !== null && g.count > 0)
+                .sort((a, b) => b.count - a.count)
+        : parsed
+      ).map(g => ({ title: g.title, subtitle: g.subtitle }));
+    });
     res.json({ genres });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -3820,19 +3898,20 @@ app.get("/api/filters/genres", async (req, res) => {
 // Available tags (browse tree: Library → Tags).
 app.get("/api/filters/tags", async (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
-  const sessionKey = "rra_tag_" + Math.random().toString(36).slice(2, 10);
   try {
-    await browse({ hierarchy: "browse", pop_all: true, multi_session_key: sessionKey });
-    const lib = await findItemByTitle(sessionKey, "browse", "Library", 50);
-    if (!lib) return res.json({ tags: [] });
-    await browse({ hierarchy: "browse", item_key: lib.item_key, multi_session_key: sessionKey });
-    const tagsNode = await findItemByTitle(sessionKey, "browse", "Tags", 100);
-    if (!tagsNode) return res.json({ tags: [] });
-    await browse({ hierarchy: "browse", item_key: tagsNode.item_key, multi_session_key: sessionKey });
-    const lvl = await loadLevel(sessionKey, "browse", 1000);
-    const tags = lvl.items
-      .filter(i => i.hint !== "header" && i.title)
-      .map(i => ({ title: i.title, subtitle: i.subtitle || "" }));
+    const tags = await withBrowseSession(async (sessionKey) => {
+      await browse({ hierarchy: "browse", pop_all: true, multi_session_key: sessionKey });
+      const lib = await findItemByTitle(sessionKey, "browse", "Library", 50);
+      if (!lib) return [];
+      await browse({ hierarchy: "browse", item_key: lib.item_key, multi_session_key: sessionKey });
+      const tagsNode = await findItemByTitle(sessionKey, "browse", "Tags", 100);
+      if (!tagsNode) return [];
+      await browse({ hierarchy: "browse", item_key: tagsNode.item_key, multi_session_key: sessionKey });
+      const lvl = await loadLevel(sessionKey, "browse", 1000);
+      return lvl.items
+        .filter(i => i.hint !== "header" && i.title)
+        .map(i => ({ title: i.title, subtitle: i.subtitle || "" }));
+    });
     res.json({ tags });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -4134,17 +4213,18 @@ app.get("/api/labels-scan-log", (req, res) => {
 // where) a "Labels" list exists on a live Core.
 app.get("/api/debug/labels", async (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
-  const sessionKey = "rra_lbldbg_" + Math.random().toString(36).slice(2, 10);
   try {
-    await browse({ hierarchy: "browse", pop_all: true, multi_session_key: sessionKey });
-    const root = await loadLevel(sessionKey, "browse", 100);
-    let library = null;
-    const lib = root.items.find(i => /^library$/i.test((i.title || "").trim()));
-    if (lib) {
-      await browse({ hierarchy: "browse", item_key: lib.item_key, multi_session_key: sessionKey });
-      library = (await loadLevel(sessionKey, "browse", 100)).items.map(i => i.title);
-    }
-    res.json({ root: root.items.map(i => i.title), library });
+    await withBrowseSession(async (sessionKey) => {
+      await browse({ hierarchy: "browse", pop_all: true, multi_session_key: sessionKey });
+      const root = await loadLevel(sessionKey, "browse", 100);
+      let library = null;
+      const lib = root.items.find(i => /^library$/i.test((i.title || "").trim()));
+      if (lib) {
+        await browse({ hierarchy: "browse", item_key: lib.item_key, multi_session_key: sessionKey });
+        library = (await loadLevel(sessionKey, "browse", 100)).items.map(i => i.title);
+      }
+      res.json({ root: root.items.map(i => i.title), library });
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -4155,17 +4235,18 @@ app.get("/api/debug/labels", async (req, res) => {
 app.get("/api/debug/filter", async (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core yet" });
   const filter = parseFilter(req.query);
-  const sessionKey = "rra_fdbg_" + Math.random().toString(36).slice(2, 10);
   try {
-    const nav = await navigateToAlbumList(sessionKey, filter);
-    const sample = await load({
-      hierarchy: nav.hierarchy, offset: 0, count: 10, multi_session_key: sessionKey
-    });
-    res.json({
-      filter, hierarchy: nav.hierarchy, total: nav.total,
-      sample: (sample.items || []).map(i => ({
-        title: i.title, subtitle: i.subtitle, hint: i.hint || null
-      }))
+    await withBrowseSession(async (sessionKey) => {
+      const nav = await navigateToAlbumList(sessionKey, filter);
+      const sample = await load({
+        hierarchy: nav.hierarchy, offset: 0, count: 10, multi_session_key: sessionKey
+      });
+      res.json({
+        filter, hierarchy: nav.hierarchy, total: nav.total,
+        sample: (sample.items || []).map(i => ({
+          title: i.title, subtitle: i.subtitle, hint: i.hint || null
+        }))
+      });
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -4200,50 +4281,51 @@ app.get("/api/debug/browse-probe", async (req, res) => {
     has_image: !!it.image_key,
     has_item_key: !!it.item_key
   });
-  const sessionKey = "rra_probe_" + Math.random().toString(36).slice(2, 10);
   try {
-    await browse({ hierarchy, pop_all: true, multi_session_key: sessionKey });
-    const resolved = [];
-    for (const seg of segments) {
-      const node = await findItemByTitle(sessionKey, hierarchy, seg, 1000);
-      if (!node) {
-        const here = await loadLevel(sessionKey, hierarchy, 200);
-        return res.status(404).json({
-          error: 'Could not find "' + seg + '" at this level',
-          resolved,
-          available_here: here.items.map(i => i.title)
-        });
+    await withBrowseSession(async (sessionKey) => {
+      await browse({ hierarchy, pop_all: true, multi_session_key: sessionKey });
+      const resolved = [];
+      for (const seg of segments) {
+        const node = await findItemByTitle(sessionKey, hierarchy, seg, 1000);
+        if (!node) {
+          const here = await loadLevel(sessionKey, hierarchy, 200);
+          return res.status(404).json({
+            error: 'Could not find "' + seg + '" at this level',
+            resolved,
+            available_here: here.items.map(i => i.title)
+          });
+        }
+        resolved.push({ segment: seg, matchedTitle: node.title || null, hint: node.hint || null });
+        await browse({ hierarchy, item_key: node.item_key, multi_session_key: sessionKey });
       }
-      resolved.push({ segment: seg, matchedTitle: node.title || null, hint: node.hint || null });
-      await browse({ hierarchy, item_key: node.item_key, multi_session_key: sessionKey });
-    }
-    const level = await loadLevel(sessionKey, hierarchy, 300);
-    const out = {
-      path: segments,
-      resolved,
-      count: level.total,
-      items: level.items.map((it, idx) => Object.assign({ idx }, mapItem(it)))
-    };
-    if (albumIdx >= 0) {
-      const target = level.items[albumIdx];
-      if (!target) {
-        out.album = { error: "No item at index " + albumIdx + " (level has " + level.items.length + " items)" };
-      } else if (!target.item_key) {
-        out.album = { error: 'Item "' + (target.title || "") + '" has no item_key to drill into' };
-      } else {
-        // Read-only drill: browse the album item with NO zone, then list its
-        // contents (top-level action_list items + tracks). Nothing is invoked.
-        await browse({ hierarchy, item_key: target.item_key, multi_session_key: sessionKey });
-        const inside = await load({ hierarchy, offset: 0, count: 500, multi_session_key: sessionKey });
-        out.album = {
-          title: target.title || null,
-          subtitle: target.subtitle || null,
-          list_title: (inside.list && inside.list.title) || null,
-          items: (inside.items || []).map(mapItem)
-        };
+      const level = await loadLevel(sessionKey, hierarchy, 300);
+      const out = {
+        path: segments,
+        resolved,
+        count: level.total,
+        items: level.items.map((it, idx) => Object.assign({ idx }, mapItem(it)))
+      };
+      if (albumIdx >= 0) {
+        const target = level.items[albumIdx];
+        if (!target) {
+          out.album = { error: "No item at index " + albumIdx + " (level has " + level.items.length + " items)" };
+        } else if (!target.item_key) {
+          out.album = { error: 'Item "' + (target.title || "") + '" has no item_key to drill into' };
+        } else {
+          // Read-only drill: browse the album item with NO zone, then list its
+          // contents (top-level action_list items + tracks). Nothing is invoked.
+          await browse({ hierarchy, item_key: target.item_key, multi_session_key: sessionKey });
+          const inside = await load({ hierarchy, offset: 0, count: 500, multi_session_key: sessionKey });
+          out.album = {
+            title: target.title || null,
+            subtitle: target.subtitle || null,
+            list_title: (inside.list && inside.list.title) || null,
+            items: (inside.items || []).map(mapItem)
+          };
+        }
       }
-    }
-    res.json(out);
+      res.json(out);
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -5786,37 +5868,38 @@ app.get("/api/debug/album", async (req, res) => {
   if (!Number.isFinite(offset) || offset < 0) {
     return res.status(400).json({ error: "Valid offset query parameter required" });
   }
-  const sessionKey = "rra_dbg_" + Math.random().toString(36).slice(2, 10);
   try {
-    await browse({ hierarchy: "albums", pop_all: true, multi_session_key: sessionKey });
-    const albumLoad = await load({
-      hierarchy: "albums", offset, count: 1, multi_session_key: sessionKey
-    });
-    const albumItem = albumLoad.items && albumLoad.items[0];
-    if (!albumItem) return res.status(404).json({ error: "Album not found at offset" });
+    await withBrowseSession(async (sessionKey) => {
+      await browse({ hierarchy: "albums", pop_all: true, multi_session_key: sessionKey });
+      const albumLoad = await load({
+        hierarchy: "albums", offset, count: 1, multi_session_key: sessionKey
+      });
+      const albumItem = albumLoad.items && albumLoad.items[0];
+      if (!albumItem) return res.status(404).json({ error: "Album not found at offset" });
 
-    await browse({
-      hierarchy: "albums",
-      item_key:  albumItem.item_key,
-      multi_session_key: sessionKey
-    });
-    const inside = await load({
-      hierarchy: "albums",
-      offset: 0,
-      count: 500,
-      multi_session_key: sessionKey
-    });
-    res.json({
-      album: { title: albumItem.title, subtitle: albumItem.subtitle },
-      list:  inside.list,
-      item_count_returned: (inside.items || []).length,
-      items: (inside.items || []).map(it => ({
-        title: it.title,
-        subtitle: it.subtitle,
-        hint: it.hint || null,
-        has_image: !!it.image_key,
-        item_key_present: !!it.item_key
-      }))
+      await browse({
+        hierarchy: "albums",
+        item_key:  albumItem.item_key,
+        multi_session_key: sessionKey
+      });
+      const inside = await load({
+        hierarchy: "albums",
+        offset: 0,
+        count: 500,
+        multi_session_key: sessionKey
+      });
+      res.json({
+        album: { title: albumItem.title, subtitle: albumItem.subtitle },
+        list:  inside.list,
+        item_count_returned: (inside.items || []).length,
+        items: (inside.items || []).map(it => ({
+          title: it.title,
+          subtitle: it.subtitle,
+          hint: it.hint || null,
+          has_image: !!it.image_key,
+          item_key_present: !!it.item_key
+        }))
+      });
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -5832,23 +5915,24 @@ app.get("/api/debug/label-scan", async (req, res) => {
   if (!Number.isFinite(offset) || offset < 0) {
     return res.status(400).json({ error: "Valid offset query parameter required" });
   }
-  const sessionKey = "rra_lbldbg2_" + Math.random().toString(36).slice(2, 10);
   try {
-    await browse({ hierarchy: "albums", pop_all: true, multi_session_key: sessionKey });
-    const albumLoad = await load({ hierarchy: "albums", offset, count: 1, multi_session_key: sessionKey });
-    const albumItem = albumLoad.items && albumLoad.items[0];
-    if (!albumItem) return res.status(404).json({ error: "Album not found at offset" });
-    await browse({ hierarchy: "albums", item_key: albumItem.item_key, multi_session_key: sessionKey });
-    const inside = await load({ hierarchy: "albums", offset: 0, count: 300, multi_session_key: sessionKey });
-    const items = inside.items || [];
-    res.json({
-      album:    { title: albumItem.title, subtitle: albumItem.subtitle, offset },
-      detected_label: null,
-      all_items: items.map(i => ({
-        title:   i.title,
-        hint:    i.hint || null,
-        has_key: !!i.item_key
-      }))
+    await withBrowseSession(async (sessionKey) => {
+      await browse({ hierarchy: "albums", pop_all: true, multi_session_key: sessionKey });
+      const albumLoad = await load({ hierarchy: "albums", offset, count: 1, multi_session_key: sessionKey });
+      const albumItem = albumLoad.items && albumLoad.items[0];
+      if (!albumItem) return res.status(404).json({ error: "Album not found at offset" });
+      await browse({ hierarchy: "albums", item_key: albumItem.item_key, multi_session_key: sessionKey });
+      const inside = await load({ hierarchy: "albums", offset: 0, count: 300, multi_session_key: sessionKey });
+      const items = inside.items || [];
+      res.json({
+        album:    { title: albumItem.title, subtitle: albumItem.subtitle, offset },
+        detected_label: null,
+        all_items: items.map(i => ({
+          title:   i.title,
+          hint:    i.hint || null,
+          has_key: !!i.item_key
+        }))
+      });
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -5903,13 +5987,33 @@ app.post("/api/play-multi", async (req, res) => {
   if (!kind)              return res.status(400).json({ error: "kind required" });
   try {
     // First album uses the requested kind (play_now / queue / next).
-    // Remaining albums are always "queue" and run in parallel — each uses
-    // its own Roon browse session so they don't interfere with each other.
+    // Remaining albums are always "queue", in batches of 4 — each open is
+    // ~7 browse round-trips on its own session, and an uncapped Promise.all
+    // over a large selection burst dozens of parallel navigations onto the
+    // single multiplexed Roon websocket (and that many simultaneous sessions
+    // onto the Core). allSettled so one failed album doesn't abandon the
+    // rest of the selection — every album is attempted, then failures are
+    // reported together.
     await openAlbumByOffset(offsets[0], zone_or_output_id, kind, filter);
-    if (offsets.length > 1) {
-      await Promise.all(
-        offsets.slice(1).map(off => openAlbumByOffset(off, zone_or_output_id, "queue", filter))
+    const MULTI_QUEUE_BATCH = 4;
+    const rest = offsets.slice(1);
+    let failed = 0, firstError = null;
+    for (let i = 0; i < rest.length; i += MULTI_QUEUE_BATCH) {
+      const results = await Promise.allSettled(
+        rest.slice(i, i + MULTI_QUEUE_BATCH)
+            .map(off => openAlbumByOffset(off, zone_or_output_id, "queue", filter))
       );
+      for (const r of results) {
+        if (r.status === "rejected") {
+          failed++;
+          if (!firstError) firstError = (r.reason && r.reason.message) || String(r.reason);
+        }
+      }
+    }
+    if (failed > 0) {
+      return res.status(500).json({
+        error: `Queued ${rest.length - failed} of ${rest.length} albums; ${failed} failed: ${firstError}`
+      });
     }
     res.json({ ok: true });
   } catch (e) {
@@ -5941,74 +6045,75 @@ async function findNowPlayingAlbum(zoneId) {
   };
   if (!title) return fallback;
 
-  const sessionKey = "rra_np_" + Math.random().toString(36).slice(2, 10);
   const hier = "browse";
 
   try {
-    // Root with EXPLICIT count: 100 — without this the search entry can be on
-    // a later page and we never see it.
-    await browse({ hierarchy: hier, pop_all: true, multi_session_key: sessionKey, zone_or_output_id: zoneId });
-    const root = await load({ hierarchy: hier, offset: 0, count: 100, multi_session_key: sessionKey });
-    const items0 = root.items || [];
+    return await withBrowseSession(async (sessionKey) => {
+      // Root with EXPLICIT count: 100 — without this the search entry can be on
+      // a later page and we never see it.
+      await browse({ hierarchy: hier, pop_all: true, multi_session_key: sessionKey, zone_or_output_id: zoneId });
+      const root = await load({ hierarchy: hier, offset: 0, count: 100, multi_session_key: sessionKey });
+      const items0 = root.items || [];
 
-    const searchItem = items0.find(i => i.input_prompt)
-                    || items0.find(i => /search/i.test(i.title || ""));
-    if (!searchItem) {
-      if (DEBUG) console.log("[np] no search at root, items were:",
-        items0.map(i => ({ title: i.title, hint: i.hint })));
-      return fallback;
-    }
+      const searchItem = items0.find(i => i.input_prompt)
+                      || items0.find(i => /search/i.test(i.title || ""));
+      if (!searchItem) {
+        if (DEBUG) console.log("[np] no search at root, items were:",
+          items0.map(i => ({ title: i.title, hint: i.hint })));
+        return fallback;
+      }
 
-    const query = `${title} ${artist}`.trim();
-    await browse({
-      hierarchy: hier, multi_session_key: sessionKey,
-      item_key: searchItem.item_key, input: query, zone_or_output_id: zoneId
+      const query = `${title} ${artist}`.trim();
+      await browse({
+        hierarchy: hier, multi_session_key: sessionKey,
+        item_key: searchItem.item_key, input: query, zone_or_output_id: zoneId
+      });
+      const results = await load({ hierarchy: hier, offset: 0, count: 100, multi_session_key: sessionKey });
+      const sections = results.items || [];
+
+      const albumsSection = sections.find(s => /album/i.test(s.title || "") && s.item_key);
+      if (!albumsSection) return fallback;
+
+      await browse({ hierarchy: hier, multi_session_key: sessionKey, item_key: albumsSection.item_key });
+      const albs = await load({ hierarchy: hier, offset: 0, count: 50, multi_session_key: sessionKey });
+
+      const titleN  = title.toLowerCase().trim();
+      const artistN = artist.toLowerCase().trim();
+      const albumItem =
+           (albs.items || []).find(i => (i.title || "").toLowerCase() === titleN
+                                      && (i.subtitle || "").toLowerCase().includes(artistN))
+        || (albs.items || []).find(i => (i.title || "").toLowerCase() === titleN)
+        || (albs.items || []).find(i => (i.title || "").toLowerCase().includes(titleN))
+        || (albs.items || [])[0];
+      if (!albumItem || !albumItem.item_key) return fallback;
+
+      await browse({ hierarchy: hier, multi_session_key: sessionKey, item_key: albumItem.item_key });
+      const inside = await load({ hierarchy: hier, multi_session_key: sessionKey, offset: 0, count: 500 });
+      const items = inside.items || [];
+
+      const playMenu = items.find(i => i.hint === "action_list" && !i.subtitle && /^play/i.test(i.title || ""))
+                    || items.find(i => i.hint === "action_list" && !i.subtitle);
+      const tracks = items
+        .filter(t => {
+          if (t === playMenu) return false;
+          if (t.hint === "action_list" && !t.subtitle) return false;
+          if (t.hint === "header") return false;
+          return true;
+        })
+        .map(t => ({
+          title:    (t.title || "").replace(/^\d+\.\s+/, ""),
+          subtitle: t.subtitle || ""
+        }));
+
+      return {
+        album: {
+          title:     albumItem.title    || title,
+          subtitle:  albumItem.subtitle || artist,
+          image_key: albumItem.image_key || image
+        },
+        tracks
+      };
     });
-    const results = await load({ hierarchy: hier, offset: 0, count: 100, multi_session_key: sessionKey });
-    const sections = results.items || [];
-
-    const albumsSection = sections.find(s => /album/i.test(s.title || "") && s.item_key);
-    if (!albumsSection) return fallback;
-
-    await browse({ hierarchy: hier, multi_session_key: sessionKey, item_key: albumsSection.item_key });
-    const albs = await load({ hierarchy: hier, offset: 0, count: 50, multi_session_key: sessionKey });
-
-    const titleN  = title.toLowerCase().trim();
-    const artistN = artist.toLowerCase().trim();
-    const albumItem =
-         (albs.items || []).find(i => (i.title || "").toLowerCase() === titleN
-                                    && (i.subtitle || "").toLowerCase().includes(artistN))
-      || (albs.items || []).find(i => (i.title || "").toLowerCase() === titleN)
-      || (albs.items || []).find(i => (i.title || "").toLowerCase().includes(titleN))
-      || (albs.items || [])[0];
-    if (!albumItem || !albumItem.item_key) return fallback;
-
-    await browse({ hierarchy: hier, multi_session_key: sessionKey, item_key: albumItem.item_key });
-    const inside = await load({ hierarchy: hier, multi_session_key: sessionKey, offset: 0, count: 500 });
-    const items = inside.items || [];
-
-    const playMenu = items.find(i => i.hint === "action_list" && !i.subtitle && /^play/i.test(i.title || ""))
-                  || items.find(i => i.hint === "action_list" && !i.subtitle);
-    const tracks = items
-      .filter(t => {
-        if (t === playMenu) return false;
-        if (t.hint === "action_list" && !t.subtitle) return false;
-        if (t.hint === "header") return false;
-        return true;
-      })
-      .map(t => ({
-        title:    (t.title || "").replace(/^\d+\.\s+/, ""),
-        subtitle: t.subtitle || ""
-      }));
-
-    return {
-      album: {
-        title:     albumItem.title    || title,
-        subtitle:  albumItem.subtitle || artist,
-        image_key: albumItem.image_key || image
-      },
-      tracks
-    };
   } catch (e) {
     if (DEBUG) console.error("[np lookup]", e.message);
     return fallback;
@@ -6029,43 +6134,62 @@ app.get("/api/album/now-playing", async (req, res) => {
 
 // Queue for a zone
 // RoonApiTransport doesn't expose a one-shot get_queue — only subscribe_queue.
-// We subscribe, respond on the first "Subscribed" payload, and accept that the
-// subscription leaks for the lifetime of the process (acceptable for occasional
-// modal opens; a future revision could keep one persistent subscription per zone).
+// We subscribe, respond on the first "Subscribed" payload, then immediately
+// unsubscribe via the handle node-roon-api returns. The old version skipped
+// the unsubscribe, so every queue-modal open left one live subscription the
+// Core kept pushing deltas to for the life of the process — an unbounded,
+// extension-induced load on the Core.
 app.get("/api/queue", (req, res) => {
   if (!core) return res.status(503).json({ error: "Not paired with Roon Core" });
   const zoneId = req.query.zone;
   if (!zoneId) return res.status(400).json({ error: "zone required" });
 
   let responded = false;
-  const timeout = setTimeout(() => {
+  let sub = null;
+  // Respond exactly once, then drop the subscription. Also runs on timeout,
+  // so a slow "Subscribed" that arrives after 504 still gets unsubscribed.
+  const finish = (send) => {
     if (responded) return;
     responded = true;
-    res.status(504).json({ error: "queue subscription timed out" });
+    clearTimeout(timeout);
+    send();
+    if (sub) {
+      try { sub.unsubscribe(() => {}); }
+      catch (e) { /* socket already gone — the subscription died with it */ }
+    }
+  };
+  const timeout = setTimeout(() => {
+    finish(() => res.status(504).json({ error: "queue subscription timed out" }));
   }, 5000);
 
   try {
-    core.services.RoonApiTransport.subscribe_queue(zoneId, 100, (response, msg) => {
-      if (responded) return;
+    sub = core.services.RoonApiTransport.subscribe_queue(zoneId, 100, (response, msg) => {
       if (response === "Subscribed") {
-        responded = true;
-        clearTimeout(timeout);
-        const items = ((msg && msg.items) || []).map(it => ({
-          queue_item_id: it.queue_item_id,
-          title:    (it.one_line && it.one_line.line1) || (it.three_line && it.three_line.line1) || "",
-          subtitle: (it.three_line && it.three_line.line2) || "",
-          image_key: it.image_key || null,
-          length:    it.length || null
-        }));
-        res.json({ items });
+        finish(() => {
+          const items = ((msg && msg.items) || []).map(it => ({
+            queue_item_id: it.queue_item_id,
+            title:    (it.one_line && it.one_line.line1) || (it.three_line && it.three_line.line1) || "",
+            subtitle: (it.three_line && it.three_line.line2) || "",
+            image_key: it.image_key || null,
+            length:    it.length || null
+          }));
+          res.json({ items });
+        });
+      } else if (response && response !== "Changed" && response !== "Unsubscribed") {
+        // An error name (e.g. "NetworkError") instead of a payload — fail fast
+        // rather than waiting out the 5 s timeout.
+        finish(() => res.status(502).json({ error: "queue subscription failed: " + response }));
       }
     });
-  } catch (e) {
-    if (!responded) {
-      responded = true;
-      clearTimeout(timeout);
-      res.status(500).json({ error: e.message || String(e) });
+    // If the first response was delivered synchronously (inside the
+    // subscribe_queue call itself), finish() ran while `sub` was still null
+    // and couldn't unsubscribe — catch up now that the handle exists.
+    if (responded && sub) {
+      try { sub.unsubscribe(() => {}); }
+      catch (e) { /* socket already gone — the subscription died with it */ }
     }
+  } catch (e) {
+    finish(() => res.status(500).json({ error: e.message || String(e) }));
   }
 });
 

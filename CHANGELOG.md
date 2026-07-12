@@ -2,6 +2,44 @@
 
 All notable changes to MusicD Remote (formerly Roon Random Albums) are documented here.
 
+## [1.6.35] — 2026-07-11
+
+### Fixed
+
+Roon API hygiene (Core load) — prompted by the community reports of Roon Server Build 1670
+GC problems where API extensions were suspected: a full review of everything this extension
+asks of the Core found no library writes and a tiny idle footprint (2 browse calls / 5 min),
+but four real hygiene issues that made it look worse than it is. All four are fixed:
+
+- **Queue subscriptions no longer leak.** Opening the queue modal subscribed to the zone's
+  queue and never unsubscribed (an acknowledged leak) — every open added one more live
+  subscription the Core kept pushing queue deltas to until the extension restarted.
+  `/api/queue` now unsubscribes immediately after the first payload (including after a
+  timeout), so the Core carries zero standing queue subscriptions.
+- **Browse sessions are pooled instead of minted per operation.** Every operation used to
+  invent a fresh random `multi_session_key` and never release it — the Core holds browse
+  state per key for as long as the extension stays connected, so sessions accumulated
+  without bound (~288/day from the 5-minute index probe alone, plus one per play, filter,
+  search and now-playing lookup). Keys are now checked out of a small pool and returned when
+  the operation finishes: the Core holds at most as many sessions as the extension's peak
+  concurrency (single digits), regardless of uptime. Safe because every operation already
+  starts with `pop_all`/fresh navigation and item_keys are never held across operations.
+- **Re-pairing no longer triggers an unconditional full library re-walk.** The album index is
+  now kept across an unpair and re-verified on re-pair with the existing cheap 2-call probe
+  (full rebuild only if the library actually changed). Previously a flapping connection — for
+  example a Core struggling with GC pauses dropping its extensions — got hit with a complete
+  library re-page on every single reconnect, on top of its existing trouble.
+- **"Play all" / multi-album queueing is throttled.** Queueing N albums fired N parallel
+  album-opens (~7 browse round-trips each) in one unbounded burst over the single Roon
+  websocket; subsequent albums are now opened in batches of 4.
+
+### Changed
+
+- **Roon API libraries pinned to exact commits.** The six `node-roon-api*` dependencies
+  pointed at RoonLabs' GitHub master, so every Docker build silently pulled whatever the API
+  repos contained that day. They are now pinned to the commits current at this release, so
+  builds are reproducible and API-lib behaviour can only change deliberately.
+
 ## [1.6.34] — 2026-07-11
 
 ### Changed
