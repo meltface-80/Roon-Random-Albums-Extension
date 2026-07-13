@@ -27,6 +27,32 @@ const DISPLAY_BUILD    = _vpatch || "0";          // "54"
 const PORT       = parseInt(process.env.PORT || "3399", 10);
 const ALBUM_COUNT_DEFAULT = 24;
 const DEBUG      = process.env.RRA_DEBUG === "1";
+// Docker Desktop on macOS has no host networking, so Roon's SOOD multicast
+// discovery can never reach the LAN. ROON_CORE_IP (already shown in the
+// README's macOS install commands) switches to a direct websocket connection
+// to the Core instead. 9330 is the Roon Core's API port — the http_port that
+// discovery would have advertised. Users paste all sorts of shapes here
+// ("http://192.168.1.5", "192.168.1.5:9330", a trailing slash), so normalise
+// to a bare host and honour an embedded port; a valid ROON_CORE_PORT wins
+// over an embedded one. IPv6 literals pass through untouched — the host:port
+// match requires exactly one colon.
+const _coreHostRaw  = (process.env.ROON_CORE_IP || "").trim()
+  .replace(/^[a-z][a-z0-9+.-]*:\/\//i, "")   // strip a pasted scheme ("http://…")
+  .replace(/\/.*$/, "");                     // strip a trailing path or slash
+const _coreHostPort = /^([^:]+):(\d{1,5})$/.exec(_coreHostRaw);
+const ROON_CORE_IP  = _coreHostPort ? _coreHostPort[1] : _coreHostRaw;
+const _corePortEnv  = parseInt(process.env.ROON_CORE_PORT || "", 10);
+const _corePortOk   = Number.isFinite(_corePortEnv) && _corePortEnv > 0 && _corePortEnv < 65536;
+if (process.env.ROON_CORE_PORT && !_corePortOk) {
+  console.warn("[roon] ROON_CORE_PORT=" + JSON.stringify(process.env.ROON_CORE_PORT) +
+               " is not a valid port — ignoring it");
+}
+// The embedded port needs the same range check as the env one: \d{1,5}
+// admits 65536–99999, and an out-of-range port makes `new URL()` throw
+// synchronously inside ws_connect — a boot crash-loop, not a retry.
+const _corePortEmb   = _coreHostPort ? parseInt(_coreHostPort[2], 10) : NaN;
+const _corePortEmbOk = Number.isFinite(_corePortEmb) && _corePortEmb > 0 && _corePortEmb < 65536;
+const ROON_CORE_PORT = _corePortOk ? _corePortEnv : (_corePortEmbOk ? _corePortEmb : 9330);
 
 // ---------------------------------------------------------------------------
 // Self-updater (checks GitHub; install offered in the web UI and Roon settings)
@@ -254,7 +280,54 @@ roon.init_services({
   provided_services: [svc_status, svc_settings]
 });
 _statusPair = "Starting\u2026"; pushStatus();
-roon.start_discovery();
+if (ROON_CORE_IP) {
+  // Direct connection for setups where multicast discovery can't work
+  // (macOS / Docker Desktop). Unlike start_discovery(), ws_connect() never
+  // retries on its own: it opens exactly one websocket, and a failed FIRST
+  // connect fires only onerror (the transport suppresses onclose until a
+  // connection has opened). Re-arm on both callbacks, matching discovery's
+  // 10s rescan cadence, or a Core restart \u2014 or the Core simply booting after
+  // this container \u2014 would strand the extension until a container restart.
+  let _coreRetryTimer = null;
+  let _coreConnGen    = 0;   // ws_connect never one-shots onerror, so a superseded socket's late callback must not re-arm the loop
+  let _coreAttempts   = 0;
+  const connectToCore = () => {
+    _coreRetryTimer = null;
+    const gen = ++_coreConnGen;
+    _coreAttempts++;
+    const retry = () => {
+      if (gen !== _coreConnGen) return;  // stale callback from an older connection generation
+      if (_coreRetryTimer) return;       // onerror + onclose can both fire for one drop \u2014 arm one timer
+      // Misconfiguration must be diagnosable without RRA_DEBUG (a wrong IP is
+      // this path's dominant failure mode, and docker logs is the only
+      // pre-pairing surface): log the first failure, then one every ~5 min.
+      if (_coreAttempts === 1 || _coreAttempts % 30 === 0) {
+        console.log("[roon] cannot reach Roon Core at " + ROON_CORE_IP + ":" + ROON_CORE_PORT +
+                    " \u2014 retrying every 10s (attempt " + _coreAttempts + ")." +
+                    " Check ROON_CORE_IP / ROON_CORE_PORT if this persists.");
+      }
+      _statusPair = "Cannot reach Roon Core at " + ROON_CORE_IP + ":" + ROON_CORE_PORT + " \u2014 retrying";
+      _statusPairErr = true; pushStatus();
+      _coreRetryTimer = setTimeout(connectToCore, 10 * 1000);
+      if (_coreRetryTimer.unref) _coreRetryTimer.unref();
+    };
+    if (DEBUG) console.log("[roon] connecting to core at " + ROON_CORE_IP + ":" + ROON_CORE_PORT);
+    _statusPair = "Connecting to Roon Core at " + ROON_CORE_IP + ":" + ROON_CORE_PORT + "\u2026";
+    _statusPairErr = false; pushStatus();
+    try {
+      roon.ws_connect({ host: ROON_CORE_IP, port: ROON_CORE_PORT, onclose: retry, onerror: retry });
+    } catch (e) {
+      // A host that can't form a valid ws:// URL (e.g. a bare IPv6 literal)
+      // makes `new WebSocket()` throw synchronously \u2014 route it into the same
+      // logged retry path instead of crash-looping the container.
+      if (_coreAttempts === 1) console.warn("[roon] ws_connect failed: " + e.message);
+      retry();
+    }
+  };
+  connectToCore();
+} else {
+  roon.start_discovery();
+}
 
 // Begin background update checks (independent of Roon pairing).
 updateCheckTick();
