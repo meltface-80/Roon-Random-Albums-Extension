@@ -181,7 +181,7 @@ The user manually publishes releases on GitHub when they are satisfied with test
 - The README contains version references (install commands, tarball URLs, `docker build` tags).
 - **Do not change any version number in README.md** unless the user explicitly says
   "promote to latest" or "update the README".
-- Current stable version in the README: **v1.6.36** (until the user says otherwise).
+- Current stable version in the README: **v1.6.37** (until the user says otherwise).
 - The extension is being renamed **MusicD Remote** ("for Roon" is descriptive, not part of the name). The Roon `extension_id` must NEVER change — it would force every user to re-authorize.
 
 ---
@@ -284,4 +284,6 @@ docker run -d \
 | v1.6.32 | stable (superseded) | Repo renamed to MusicD-Remote: new install paths/names, tarball renamed (docker suffix dropped), updater derives new repo |
 | v1.6.33 | superseded | Release automation naming fixed for MusicD-Remote; migration banner URL |
 | v1.6.34 | stable (superseded) | Settings category redesign; faster artist search |
-| v1.6.35 | **Latest (stable)** | Roon API hygiene: queue-subscription leak fixed, pooled browse sessions, re-pair probe instead of full rescan, play-multi throttled, roon API deps pinned — README points here |
+| v1.6.35 | stable (superseded) | Roon API hygiene: queue-subscription leak fixed, pooled browse sessions, re-pair probe instead of full rescan, play-multi throttled, roon API deps pinned |
+| v1.6.36 | stable (superseded) | macOS/Docker Desktop direct Core connection via ROON_CORE_IP (ws_connect + retry; discovery unchanged without it) |
+| v1.6.37 | **Latest (stable)** | Probe-verified index freshness (hourly full re-walks → at most daily); docker-compose builds from GitHub tag with correct names/volume — README points here |
