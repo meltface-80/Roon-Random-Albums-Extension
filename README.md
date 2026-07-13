@@ -450,6 +450,8 @@ Please let me know if you run into any trouble.
 | `PORT`       | `3399`    | HTTP port the UI listens on |
 | `RRA_DEBUG`  | —         | Set to `1` for verbose logging |
 | `MUSIC_DIR`  | `/music`  | Path where your music library is mounted inside the container |
+| `ROON_CORE_IP` | *(discover)* | Roon Core address, for setups where multicast discovery can't reach it (macOS / Docker Desktop). When set, the extension connects to the Core directly instead of discovering it |
+| `ROON_CORE_PORT` | `9330` | Roon Core API port used with `ROON_CORE_IP` — only change it if your Core runs its API on a non-standard port |
 
 Pass extra env vars with `-e` in the `docker run` command:
 

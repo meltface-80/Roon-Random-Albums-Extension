@@ -492,6 +492,7 @@ docker run -d \
         <tbody>
           <tr><td>PORT</td><td><code>3399</code></td><td>HTTP port for this app</td></tr>
           <tr><td>ROON_CORE_IP</td><td><i>(discover)</i></td><td>Roon Core address for setups where multicast discovery can't reach it (macOS / Docker Desktop)</td></tr>
+          <tr><td>ROON_CORE_PORT</td><td><code>9330</code></td><td>Roon Core API port used with ROON_CORE_IP — only change it if your Core runs its API on a non-standard port</td></tr>
           <tr><td>MUSIC_DIR</td><td><code>/music</code></td><td>Where the optional read-only music mount lives inside the container (only used for file-tag label scanning)</td></tr>
           <tr><td>RRA_DEBUG</td><td>–</td><td><code>1</code> for verbose logging</td></tr>
         </tbody>

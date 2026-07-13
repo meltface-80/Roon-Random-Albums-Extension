@@ -2,6 +2,45 @@
 
 All notable changes to MusicD Remote (formerly Roon Random Albums) are documented here.
 
+## [1.6.36] — 2026-07-13
+
+### Fixed
+
+- **macOS / Docker Desktop installs can now actually reach the Roon Core.** The README's
+  macOS instructions have told users to set `-e ROON_CORE_IP=<ip>`, but the extension never
+  read that variable — it unconditionally ran `roon.start_discovery()`, whose UDP multicast
+  (SOOD, `239.255.90.90:9003`, TTL 1) cannot escape Docker Desktop's VM without host
+  networking. macOS installs could therefore never pair, and the documented workaround was
+  wired to nothing. When `ROON_CORE_IP` is set the extension now connects straight to the
+  Core's websocket API (`ws://<ip>:9330/api`; port overridable via `ROON_CORE_PORT`).
+  Class of error: documented configuration never implemented in code — caught by tracing
+  every documented env var to a `process.env` read.
+- **Direct connection self-heals.** Unlike discovery (which rescans every 10 s), the Roon
+  API's `ws_connect()` is single-shot: it never retries, and a failed *first* connect fires
+  only its error callback. The direct path re-arms itself on both close and error with a
+  10 s backoff, so a Core restart, a network blip, or the container starting before the Core
+  comes up no longer strands the extension until a manual container restart. Linux /
+  host-network installs are untouched — without `ROON_CORE_IP`, discovery runs exactly as
+  before.
+
+- **Direct-connect misconfiguration is diagnosable** (8-angle review findings). A wrong IP or
+  port previously retried forever showing only "Starting…", with the connect log gated behind
+  `RRA_DEBUG`. Now: the first failed attempt (and one every ~5 minutes after) logs
+  `cannot reach Roon Core at <ip>:<port>` to `docker logs` unconditionally; the Roon status
+  line shows the address being tried; an invalid `ROON_CORE_PORT` value is rejected with a
+  warning instead of silently producing `ws://<ip>:NaN/api`; and a pasted scheme, trailing
+  slash, or embedded `ip:port` in `ROON_CORE_IP` is normalised instead of building a broken
+  URL (an out-of-range embedded port falls back to 9330 — unvalidated it made `new URL()`
+  throw synchronously and crash-loop the container at boot, and any other unconnectable
+  host value now routes into the logged retry instead of crashing). A stale socket's late
+  error callback can no longer re-arm the retry loop against a healthy connection
+  (connection-generation guard).
+
+### Added
+
+- `ROON_CORE_IP` and `ROON_CORE_PORT` documented in the README configuration table and the
+  docs-site environment table.
+
 ## [1.6.35] — 2026-07-11
 
 ### Fixed
