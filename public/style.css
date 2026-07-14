@@ -747,7 +747,7 @@ main {
 }
 .track-list li {
   counter-increment: trk;
-  display: flex; align-items: baseline; gap: 12px;
+  display: flex; align-items: flex-start; gap: 12px;
   padding: 10px 4px;
   border-bottom: 1px solid var(--border);
   font-size: 14px; color: var(--text);
@@ -757,15 +757,25 @@ main {
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
   font-size: 12px; min-width: 22px;
+  line-height: 20px;   /* optically aligns the number with the 14px title line */
+}
+/* Two-line rows, queue-tab style: title over the FULL artist credit. The
+   old layout put the artist in a right-aligned 35%-wide ellipsis column,
+   which cut multi-artist credits off (the whole reason for this redesign). */
+.track-list .t-text {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
 }
 .track-list .t-title {
-  flex: 1; min-width: 0;
+  min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .track-list .t-sub {
-  color: var(--text-dim); font-size: 13px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 35%;
+  color: var(--text-dim); font-size: 12px;
+  margin-top: 1px;
+  overflow-wrap: anywhere;   /* long multi-artist credits wrap, never clip */
 }
+.track-list .t-sub:empty { display: none; }
 
 /* ------------------------------------------------------------------ */
 /*  Toast                                                              */

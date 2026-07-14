@@ -1201,11 +1201,15 @@
       modalTracks.innerHTML = "";
       for (const t of j.tracks) {
         const li = document.createElement("li");
+        // Two-line rows (queue-tab style): title over the FULL artist credit,
+        // stacked in a .t-text column so multi-artist tracks aren't clipped.
+        const tx = document.createElement("div"); tx.className = "t-text";
         const ti = document.createElement("span"); ti.className = "t-title";
         ti.textContent = t.title || "";
         const su = document.createElement("span"); su.className = "t-sub";
         su.textContent = t.subtitle || "";
-        li.appendChild(ti); li.appendChild(su);
+        tx.appendChild(ti); tx.appendChild(su);
+        li.appendChild(tx);
         modalTracks.appendChild(li);
       }
     } else {
@@ -1404,11 +1408,16 @@
       trackList.forEach((t, idx) => {
         const li = document.createElement("li");
         li.className = "t-row";
+        // Same two-line .t-text structure as the cached render above — the
+        // .t-actions row stays a SIBLING of .t-text so the is-open flex-wrap
+        // still drops it onto its own full-width line.
+        const tx = document.createElement("div"); tx.className = "t-text";
         const ti = document.createElement("span"); ti.className = "t-title";
         ti.textContent = t.title || "";
         const su = document.createElement("span"); su.className = "t-sub";
         su.textContent = t.subtitle || "";
-        li.appendChild(ti); li.appendChild(su);
+        tx.appendChild(ti); tx.appendChild(su);
+        li.appendChild(tx);
         li.addEventListener("click", (e) => {
           if (e.target.closest(".t-actions")) return;   // taps on the buttons themselves
           toggleTrackActions(li, t, idx);

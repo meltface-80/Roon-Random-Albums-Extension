@@ -2,6 +2,17 @@
 
 All notable changes to MusicD Remote (formerly Roon Random Albums) are documented here.
 
+## [1.6.39] — 2026-07-14
+
+### Changed
+
+- **Album view track rows show the full artist credits** (user request). Track rows were
+  [number | title | artist right-aligned in a 35%-wide ellipsis column], which cut off
+  multi-artist credits ("Crosby, Stills, Nash…"). They now use the same two-line layout as
+  the Queue tab and the Qobuz app: title on the first line, the complete artist/composer
+  credit beneath it in dim text that wraps instead of clipping. The per-track Play now /
+  Queue tap-to-expand actions are unchanged.
+
 ## [1.6.38] — 2026-07-14
 
 ### Fixed
