@@ -1909,21 +1909,33 @@ input.vol-range::-moz-range-thumb {
   text-align: center; color: var(--text-dim); font-size: 15px;
 }
 
-/* Artist header: round avatar + validated bio (library artist view; the
-   Qobuz artist screen reuses .artist-bio-body/.artist-bio-foot below). */
-.artist-bio-head { grid-column: 1 / -1; padding: 2px 0 10px; }
-.artist-bio-row  { display: flex; gap: 14px; align-items: flex-start; }
-.artist-bio-avatar {
-  width: 72px; height: 72px;
-  border-radius: 50%; object-fit: cover;
-  flex: 0 0 auto;
-  background: var(--bg-elev);
+/* Artist header, LMS-remote style: large centred round portrait on top,
+   bio beneath it, centred Show more + "Bio: <source>" caption. The Qobuz
+   artist screen reuses .artist-bio-body/.artist-bio-foot for its bio block
+   under its own compact header row. */
+.artist-bio-head {
+  grid-column: 1 / -1;
+  padding: 6px 0 12px;
+  display: flex; flex-direction: column; align-items: center;
 }
-.artist-bio-body { flex: 1; min-width: 0; }
-.artist-bio-body .bio-text { font-size: 13.5px; line-height: 1.55; color: var(--text-dim); }
-.artist-bio-foot { display: flex; gap: 12px; align-items: center; margin-top: 4px; }
+.artist-bio-avatar {
+  width: min(46vw, 200px); height: min(46vw, 200px);
+  border-radius: 50%; object-fit: cover;
+  background: var(--bg-elev);
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-card);
+}
+.artist-bio-body { width: 100%; max-width: 680px; min-width: 0; }
+.artist-bio-body .bio-text { font-size: 13.5px; line-height: 1.6; color: var(--text-dim); }
+.artist-bio-foot {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 2px; margin-top: 6px;
+}
 .artist-bio-src  { font-size: 12px; color: var(--text-faint); }
+/* Qobuz artist screen: bio sits under the compact avatar+name row, so its
+   footer stays inline/left rather than centred. */
 .qobuz-artist-bio { margin-top: 10px; }
+.qobuz-artist-bio .artist-bio-foot { flex-direction: row; align-items: center; gap: 12px; }
 .content-count {
   display: flex; align-items: center; padding: 8px 16px;
   font-size: 14px; color: var(--text-dim);

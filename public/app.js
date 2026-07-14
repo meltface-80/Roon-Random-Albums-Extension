@@ -5742,16 +5742,18 @@ initServiceBrowser({
       if (!b || !b.text) return;
       if (seq !== bioSeq || !artistViewActive) return;   // superseded / view closed
 
+      // LMS-remote layout: large centred round portrait on top, bio beneath
+      // it full-width, then a centred Show more and a centred "Bio: <source>"
+      // caption — not a thumbnail beside the text.
       const head = document.createElement("div");
       head.className = "artist-bio-head";
-      const row = document.createElement("div");
-      row.className = "artist-bio-row";
       if (b.image) {
         const img = document.createElement("img");
         img.className = "artist-bio-avatar";
         img.alt = "";
+        img.onerror = () => img.remove();   // dead portrait URL — no broken-image circle
         img.src = b.image;
-        row.appendChild(img);
+        head.appendChild(img);
       }
       const body = document.createElement("div");
       body.className = "artist-bio-body";
@@ -5770,8 +5772,7 @@ initServiceBrowser({
       src.textContent = b.source ? "Bio: " + b.source : "";
       foot.appendChild(toggle); foot.appendChild(src);
       body.appendChild(text); body.appendChild(foot);
-      row.appendChild(body);
-      head.appendChild(row);
+      head.appendChild(body);
       grid.prepend(head);
       if (window.__setupBioToggle) window.__setupBioToggle(text, toggle);
     } catch (e) { /* bio is decorative — the album grid stands alone */ }

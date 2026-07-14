@@ -2,6 +2,17 @@
 
 All notable changes to MusicD Remote (formerly Roon Random Albums) are documented here.
 
+## [1.6.41] — 2026-07-14
+
+### Changed
+
+- **Artist bio header now matches the LMS-remote reference** (user feedback on v1.6.40).
+  The artist portrait was a small 72px thumbnail beside the text; it is now a large centred
+  round portrait (up to 200px) above the bio, with the bio full-width beneath it and the
+  Show more control and "Bio: <source>" caption centred underneath — the layout from the
+  user's example. The Qobuz browser's artist screen keeps its compact avatar+name row and
+  inline footer.
+
 ## [1.6.40] — 2026-07-14
 
 ### Added
