@@ -110,7 +110,11 @@ Do not commit with known CONFIRMED or PLAUSIBLE bugs. Fix them all in the same v
 - Develop on a **feature branch** of `meltface-80/MusicD-Remote` (e.g. `claude/<topic>`). Never commit directly to `main`.
 - For each change: commit to the branch, build and **commit the tarball to the branch** (see below), push, and give the user the docker install command for the branch build. The user tests the branch build, then opens and merges the PR themselves.
 - **Never open or merge a pull request yourself** unless the user explicitly asks. The user merges.
-- After the user confirms the merge, update `README.md` version references and any other affected docs (see the README rule below).
+- **When the user says "merged", it means merged AND the release is published as latest** —
+  run the promotion pass immediately without asking: bump every README version reference,
+  the docs-site fallback version/examples, and this file's current-stable note + version
+  history table, as a docs-only commit on the freshly-restarted branch. (Established
+  2026-07-14; the user should not have to say "promote to latest" separately.)
 - The `old/` folder contains two permanent historical tarballs (v1.5.37 and v1.5.49). **Do not add to or remove from this folder.**
 
 ---
@@ -181,7 +185,7 @@ The user manually publishes releases on GitHub when they are satisfied with test
 - The README contains version references (install commands, tarball URLs, `docker build` tags).
 - **Do not change any version number in README.md** unless the user explicitly says
   "promote to latest" or "update the README".
-- Current stable version in the README: **v1.6.41** (until the user says otherwise).
+- Current stable version in the README: **v1.6.42** (until the user says otherwise).
 - The extension is being renamed **MusicD Remote** ("for Roon" is descriptive, not part of the name). The Roon `extension_id` must NEVER change — it would force every user to re-authorize.
 
 ---
@@ -290,4 +294,5 @@ docker run -d \
 | v1.6.38 | stable (superseded) | Stale-offset play defense (identity travels with every offset play; relocate-or-409); Roon-style volume sheets on mini bar + now-playing |
 | v1.6.39 | stable (superseded) | Album view track rows: two-line queue-style layout, full artist credits (no more 35%-column clipping) |
 | v1.6.40 | stable (superseded) | Per-artist links on multi-artist albums (library-validated split); artist bios via the validated Qobuz/Tidal/Wikipedia pipeline; Qobuz browser bio surfaced |
-| v1.6.41 | **Latest (stable)** | Artist bio header restyled to the LMS reference (large centred portrait, centred Show more/source) — README points here |
+| v1.6.41 | stable (superseded) | Artist bio header restyled to the LMS reference (large centred portrait, centred Show more/source) |
+| v1.6.42 | **Latest (stable)** | Observability: debug default in Docker (RRA_DEBUG=0 quiets), ISO-timestamped logs, Roon browse/load/image traces with durations, always-on failure + pairing logs, [http] request traces — README points here |
