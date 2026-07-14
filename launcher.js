@@ -10,6 +10,13 @@
 // files while the app is NOT running, so nothing replaces itself in place) and
 // relaunches. Any other exit code stops the launcher too.
 
+// Timestamp the launcher's own few lines the same way index.js stamps its
+// output (the child runs with inherited stdio and stamps itself).
+for (const _level of ["log", "warn", "error"]) {
+  const _orig = console[_level].bind(console);
+  console[_level] = (...args) => _orig(new Date().toISOString(), ...args);
+}
+
 const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");

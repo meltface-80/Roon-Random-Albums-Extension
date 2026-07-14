@@ -2,6 +2,29 @@
 
 All notable changes to MusicD Remote (formerly Roon Random Albums) are documented here.
 
+## [1.6.42] — 2026-07-14
+
+### Changed
+
+- **Observability overhaul** (user request: debug by default in Docker, better logging,
+  Roon API call focus, better traces all round).
+  - **Debug logging is now ON by default inside Docker** (the image already sets `DOCKER=1`;
+    every debug gate in the codebase is logging-only — verified — so nothing behavioral
+    changes). `-e RRA_DEBUG=0` quiets a container; `RRA_DEBUG=1` still forces it on for
+    native runs. The startup banner states the version and whether debug is on.
+  - **Every log line is timestamped** (ISO-8601 UTC, both the app and the launcher), so
+    `docker logs` can be correlated line-for-line with Roon Server's own logs.
+  - **Roon API calls are traced with round-trip durations**: `browse`/`load` log the request,
+    the duration, the action/title and item/total counts; image fetches log duration, key,
+    content type and size (only cache misses reach Roon). **Failures always log** — with the
+    duration and the offending opts — even with debug off; a failed Roon call is never
+    invisible again.
+  - **API request tracing**: every user-action API request logs method, path, status and
+    duration (`[http] POST /api/play -> 200 312ms`). The steady pollers (zone-state, zones,
+    image, status polls) are excluded so real actions stay readable.
+  - **Pairing lifecycle is always logged**: paired (with core id/name/version), zone
+    subscription established (zone count), unpaired.
+
 ## [1.6.41] — 2026-07-14
 
 ### Changed
