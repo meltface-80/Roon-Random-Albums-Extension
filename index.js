@@ -26,7 +26,23 @@ const DISPLAY_BUILD    = _vpatch || "0";          // "54"
 
 const PORT       = parseInt(process.env.PORT || "3399", 10);
 const ALBUM_COUNT_DEFAULT = 24;
-const DEBUG      = process.env.RRA_DEBUG === "1";
+// Debug logging defaults ON inside Docker (the image sets DOCKER=1) — docker
+// logs is the only diagnostic surface users have, and every DEBUG gate in
+// this codebase is logging-only (verified), so this changes no behavior.
+// RRA_DEBUG=0 quiets a container; RRA_DEBUG=1 forces it on outside Docker.
+const DEBUG      = process.env.RRA_DEBUG === "1" ||
+                   (process.env.DOCKER === "1" && process.env.RRA_DEBUG !== "0");
+
+// ---------------------------------------------------------------------------
+// Timestamped logs: every line gets an ISO-8601 UTC prefix so docker logs can
+// be correlated with Roon Server's own log timestamps. Patched once, before
+// anything logs — the launcher runs index.js with inherited stdio, so this
+// covers everything the container prints (the launcher stamps its own lines).
+// ---------------------------------------------------------------------------
+for (const _level of ["log", "warn", "error"]) {
+  const _orig = console[_level].bind(console);
+  console[_level] = (...args) => _orig(new Date().toISOString(), ...args);
+}
 // Docker Desktop on macOS has no host networking, so Roon's SOOD multicast
 // discovery can never reach the LAN. ROON_CORE_IP (already shown in the
 // README's macOS install commands) switches to a direct websocket connection
@@ -125,9 +141,14 @@ const roon = new RoonApi({
 
   core_paired: function (c) {
     core = c;
+    // Always-on: pairing transitions are the spine of every support log.
+    console.log("[roon] paired with core", c.core_id,
+                "(" + (c.display_name || "unnamed") + " " + (c.display_version || "") + ")");
     _statusPair = "Paired with " + c.core_id; _statusPairErr = false; pushStatus();
     c.services.RoonApiTransport.subscribe_zones((cmd, data) => {
       if (cmd === "Subscribed") {
+        console.log("[roon] zone subscription established —",
+                    (data.zones || []).length, "zone(s)");
         zones = {}; outputs = {};
         // Reset transition tracking — treat every zone as newly seen.
         Object.keys(zonePrevState).forEach(k => delete zonePrevState[k]);
@@ -162,6 +183,7 @@ const roon = new RoonApi({
     // search while disconnected, and startIndexMaintenance() re-verifies it on
     // re-pair with a cheap 2-call probe instead of a full library re-walk —
     // a flapping connection no longer multiplies full rescans onto the Core.
+    console.log("[roon] unpaired from core — index kept, awaiting re-pair");
     _statusPair = "Not paired with any Roon Core"; _statusPairErr = true; pushStatus();
   }
 });
@@ -337,13 +359,24 @@ if (_updTimer.unref) _updTimer.unref();
 // ---------------------------------------------------------------------------
 // Promisified Roon calls
 // ---------------------------------------------------------------------------
+// Every Roon browse/load/image call is traced with its round-trip duration:
+// the request at DEBUG, the outcome with ms at DEBUG, failures ALWAYS (with
+// the offending opts — a failed Roon call should never be invisible).
 function browse(opts) {
   return new Promise((resolve, reject) => {
     if (!core) return reject(new Error("Not paired with a Roon Core yet"));
+    const t0 = Date.now();
     if (DEBUG) console.log("[browse]", JSON.stringify(opts));
     core.services.RoonApiBrowse.browse(opts, (err, body) => {
-      if (err) return reject(new Error(typeof err === "string" ? err : JSON.stringify(err)));
-      if (DEBUG) console.log("[browse:res]", body && body.action, body && body.list && body.list.title);
+      const ms = Date.now() - t0;
+      if (err) {
+        const msg = typeof err === "string" ? err : JSON.stringify(err);
+        console.error("[browse] failed after " + ms + "ms:", msg, "opts:", JSON.stringify(opts));
+        return reject(new Error(msg));
+      }
+      if (DEBUG) console.log("[browse:res]", ms + "ms", body && body.action,
+                             body && body.list && body.list.title,
+                             "count:", body && body.list ? body.list.count : "-");
       resolve(body);
     });
   });
@@ -351,11 +384,18 @@ function browse(opts) {
 function load(opts) {
   return new Promise((resolve, reject) => {
     if (!core) return reject(new Error("Not paired with a Roon Core yet"));
+    const t0 = Date.now();
     if (DEBUG) console.log("[load]", JSON.stringify(opts));
     core.services.RoonApiBrowse.load(opts, (err, body) => {
-      if (err) return reject(new Error(typeof err === "string" ? err : JSON.stringify(err)));
-      if (DEBUG) console.log("[load:res]", body && body.list && body.list.title,
-                            "items:", (body && body.items || []).length);
+      const ms = Date.now() - t0;
+      if (err) {
+        const msg = typeof err === "string" ? err : JSON.stringify(err);
+        console.error("[load] failed after " + ms + "ms:", msg, "opts:", JSON.stringify(opts));
+        return reject(new Error(msg));
+      }
+      if (DEBUG) console.log("[load:res]", ms + "ms", body && body.list && body.list.title,
+                            "items:", (body && body.items || []).length,
+                            "total:", body && body.list ? body.list.count : "-");
       resolve(body);
     });
   });
@@ -363,9 +403,20 @@ function load(opts) {
 function getImage(image_key, opts) {
   return new Promise((resolve, reject) => {
     if (!core) return reject(new Error("Not paired with a Roon Core yet"));
-    core.services.RoonApiImage.get_image(image_key, opts, (err, content_type, body) =>
-      err ? reject(new Error(typeof err === "string" ? err : JSON.stringify(err)))
-          : resolve({ content_type, body }));
+    const t0 = Date.now();
+    core.services.RoonApiImage.get_image(image_key, opts, (err, content_type, body) => {
+      const ms = Date.now() - t0;
+      if (err) {
+        const msg = typeof err === "string" ? err : JSON.stringify(err);
+        console.error("[image] failed after " + ms + "ms:", msg, "key:", image_key);
+        return reject(new Error(msg));
+      }
+      // Only cache MISSES reach Roon (see /api/image's LRU), so this stays
+      // readable even though art is the highest-volume asset.
+      if (DEBUG) console.log("[image]", ms + "ms", image_key, "->",
+                             content_type, (body ? body.length : 0) + "b");
+      resolve({ content_type, body });
+    });
   });
 }
 
@@ -3808,6 +3859,18 @@ function matchLibraryAlbum(album, artist) {
 // ---------------------------------------------------------------------------
 const app = express();
 app.use(express.json());
+// API request tracing (DEBUG): method, path, status, duration — one line per
+// user action. The steady pollers are excluded: they'd bury everything else
+// under a line every 1.5s (zone-state) and per art tile (image).
+const TRACE_SKIP = /^\/api\/(zone-state|zones$|image\/|update\/status|settings\/tidal\/status|labels-scan-status|search-status)/;
+app.use((req, res, next) => {
+  if (!DEBUG || !req.path.startsWith("/api/") || TRACE_SKIP.test(req.path)) return next();
+  const t0 = Date.now();
+  res.on("finish", () => {
+    console.log("[http]", req.method, req.originalUrl, "->", res.statusCode, (Date.now() - t0) + "ms");
+  });
+  next();
+});
 // Gzip responses (app.js is ~230KB, style.css ~120KB — ~70% smaller on the
 // wire). Images are already binary (jpeg) so compression skips them.
 app.use(compression());
@@ -6747,6 +6810,9 @@ app.get("/api/shortcut/play-unheard", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log("Roon Random Albums UI listening on http://0.0.0.0:" + PORT);
+  console.log("MusicD Remote v" + pkg.version +
+              " — debug logging " + (DEBUG ? "ON" : "off") +
+              (process.env.DOCKER === "1" ? " (Docker default; RRA_DEBUG=0 to quiet)" : ""));
   console.log("Make sure to authorise the extension in Roon → Settings → Extensions.");
   if (DEBUG) console.log("Debug logging enabled (RRA_DEBUG=1).");
 });
