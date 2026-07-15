@@ -417,12 +417,17 @@ function browse(opts) {
     if (DEBUG) console.log("[browse]", JSON.stringify(opts));
     core.services.RoonApiBrowse.browse(opts, (err, body) => {
       const ms = Date.now() - t0;
+      // Concurrent operations interleave in the log, so the :res line carries
+      // the session key + request shape — a slow call is attributable without
+      // hunting for its matching request line.
+      const who = (opts.multi_session_key || "-") + " " + (opts.hierarchy || "-") +
+                  (opts.pop_all ? " pop_all" : (opts.item_key ? " item" : ""));
       if (err) {
         const msg = typeof err === "string" ? err : JSON.stringify(err);
-        console.error("[browse] failed after " + ms + "ms:", msg, "opts:", JSON.stringify(opts));
+        console.error("[browse] failed after " + ms + "ms:", who, msg, "opts:", JSON.stringify(opts));
         return reject(new Error(msg));
       }
-      if (DEBUG) console.log("[browse:res]", ms + "ms", body && body.action,
+      if (DEBUG) console.log("[browse:res]", ms + "ms", who, body && body.action,
                              body && body.list && body.list.title,
                              "count:", body && body.list ? body.list.count : "-");
       resolve(body);
@@ -436,12 +441,15 @@ function load(opts) {
     if (DEBUG) console.log("[load]", JSON.stringify(opts));
     core.services.RoonApiBrowse.load(opts, (err, body) => {
       const ms = Date.now() - t0;
+      // Same attribution as [browse:res]: key + hierarchy + offset/count.
+      const who = (opts.multi_session_key || "-") + " " + (opts.hierarchy || "-") +
+                  " @" + (opts.offset != null ? opts.offset : 0) + "x" + (opts.count != null ? opts.count : "-");
       if (err) {
         const msg = typeof err === "string" ? err : JSON.stringify(err);
-        console.error("[load] failed after " + ms + "ms:", msg, "opts:", JSON.stringify(opts));
+        console.error("[load] failed after " + ms + "ms:", who, msg, "opts:", JSON.stringify(opts));
         return reject(new Error(msg));
       }
-      if (DEBUG) console.log("[load:res]", ms + "ms", body && body.list && body.list.title,
+      if (DEBUG) console.log("[load:res]", ms + "ms", who, body && body.list && body.list.title,
                             "items:", (body && body.items || []).length,
                             "total:", body && body.list ? body.list.count : "-");
       resolve(body);
