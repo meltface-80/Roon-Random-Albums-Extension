@@ -853,30 +853,45 @@ async function pickSmartAlbum() {
 // playback never fails just because the index is old. Returns the matching
 // album item in the "browse" hierarchy (drill its item_key for tracks + the
 // Play action), or null when the album genuinely isn't in the library.
-async function findAlbumViaSearch(sessionKey, title, artist) {
+async function findAlbumViaSearch(sessionKey, title, artist, zoneId) {
   const t = (title || "").trim();
   if (!t) return null;
+  // Roon's browse root + search are ZONE-SCOPED — the working now-playing
+  // resolver passes a zone on every call. The open-detail path has no zone, so
+  // fall back to any live zone purely as browse context (we're only reading).
+  const zone = zoneId || Object.keys(zones)[0] || undefined;
   const hier = "browse";
-  await browse({ hierarchy: hier, pop_all: true, multi_session_key: sessionKey });
+  // Every stage logs unconditionally: this is the stale-offset recovery path,
+  // and when it can't find an album the log must show WHICH stage failed.
+  await browse({ hierarchy: hier, pop_all: true, multi_session_key: sessionKey, zone_or_output_id: zone });
   const root = await load({ hierarchy: hier, offset: 0, count: 100, multi_session_key: sessionKey });
   const items0 = root.items || [];
   const searchItem = items0.find(i => i.input_prompt) || items0.find(i => /search/i.test(i.title || ""));
-  if (!searchItem) return null;
+  if (!searchItem) { console.log("[album:search] no Search entry at browse root for " + JSON.stringify(t)); return null; }
   const query = `${t} ${artist || ""}`.trim();
-  await browse({ hierarchy: hier, multi_session_key: sessionKey, item_key: searchItem.item_key, input: query });
+  await browse({ hierarchy: hier, multi_session_key: sessionKey, item_key: searchItem.item_key, input: query, zone_or_output_id: zone });
   const results = await load({ hierarchy: hier, offset: 0, count: 100, multi_session_key: sessionKey });
-  const albumsSection = (results.items || []).find(sec => /album/i.test(sec.title || "") && sec.item_key);
-  if (!albumsSection) return null;
+  const sections = results.items || [];
+  const albumsSection = sections.find(s => /album/i.test(s.title || "") && s.item_key);
+  if (!albumsSection) { console.log("[album:search] no Albums section for " + JSON.stringify(query) + "; sections=" + JSON.stringify(sections.map(s => s.title))); return null; }
   await browse({ hierarchy: hier, multi_session_key: sessionKey, item_key: albumsSection.item_key });
   const albs = await load({ hierarchy: hier, offset: 0, count: 50, multi_session_key: sessionKey });
-  const tN = normalize(t), aN = normalize(artist || "");
   const list = albs.items || [];
-  return list.find(i => normalize(i.title) === tN && (!aN || normalize(i.subtitle).includes(aN)))
-      || list.find(i => normalize(i.title) === tN)
-      || null;
+  const tN = normalize(t), aN = normalize(artist || "");
+  const hit =
+       list.find(i => normalize(i.title) === tN && (!aN || normalize(i.subtitle).includes(aN)))
+    || list.find(i => normalize(i.title) === tN)
+    || list.find(i => { const n = normalize(i.title); return n.includes(tN) || tN.includes(n); })
+    || list[0];
+  if (!hit || !hit.item_key) {
+    console.log("[album:search] no album match for " + JSON.stringify(t) + " among " + JSON.stringify(list.slice(0, 6).map(i => i.title)));
+    return null;
+  }
+  console.log("[album:search] resolved " + JSON.stringify(t) + " -> " + JSON.stringify(hit.title) + " / " + JSON.stringify(hit.subtitle));
+  return hit;
 }
 
-async function loadAlbumSession(sessionKey, offset, filter, expect) {
+async function loadAlbumSession(sessionKey, offset, filter, expect, zoneId) {
   // 1) Navigate to the album list this offset belongs to (full library, or a
   //    genre/tag list when a filter is active — offsets are per-list). Decade
   //    offsets are full-library positions, so resolve them against the full
@@ -924,7 +939,7 @@ async function loadAlbumSession(sessionKey, offset, filter, expect) {
       // single-album lookup (not a library scan), so it's safe even mid-import.
       // Only a genuinely-removed album falls through to the stale error.
       const live = (expect && expect.title)
-        ? await findAlbumViaSearch(sessionKey, expect.title, expect.subtitle)
+        ? await findAlbumViaSearch(sessionKey, expect.title, expect.subtitle, zoneId)
         : null;
       if (live) {
         if (DEBUG) console.log("[album] stale offset " + offset + " resolved live via search for " +
@@ -1021,7 +1036,7 @@ function relocateAlbumOffset(expect) {
 async function openAlbumByOffset(offset, zoneOrOutputId, invokeKind, filter, expect) {
   return withBrowseSession(async (sessionKey) => {
     const { hierarchy, albumItem, items, playMenu, offset: effectiveOffset } =
-      await loadAlbumSession(sessionKey, offset, filter, expect);
+      await loadAlbumSession(sessionKey, offset, filter, expect, zoneOrOutputId);
 
     const albumInfo = {
       title:     albumItem.title || "",

@@ -2,6 +2,21 @@
 
 All notable changes to MusicD Remote (formerly Roon Random Albums) are documented here.
 
+## [1.6.48] — 2026-07-15
+
+### Fixed
+
+- **The live-name playback fallback now actually resolves albums** (v1.6.47 shipped it but it
+  failed for real albums). Comparing it against the extension's proven now-playing resolver
+  found two faults: (1) it passed **no zone** on the Roon search browses, but Roon's browse
+  root and search are zone-scoped, so the Search entry / results came back empty — it now
+  passes the play zone (or any live zone as browse context when opening detail); (2) its
+  album match gave up after an exact-title check, so a Roon title that differs slightly (e.g.
+  a "(Live)" suffix) fell through to the "close and reopen" error — it now mirrors the
+  now-playing resolver's fallbacks (exact + artist → exact → substring → top result). Every
+  stage of the fallback logs unconditionally, so a miss shows in `docker logs` exactly which
+  step failed (`[album:search] …`).
+
 ## [1.6.47] — 2026-07-15
 
 ### Changed
