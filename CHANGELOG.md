@@ -2,6 +2,19 @@
 
 All notable changes to MusicD Remote (formerly Roon Random Albums) are documented here.
 
+## [1.6.44] — 2026-07-15
+
+### Changed
+
+- **Roon call traces are now self-attributing** (follow-up to a user's log analysis on Roon
+  Early Access 1674 that found browse calls taking 13–27 seconds). `[browse:res]`/`[load:res]`
+  and failure lines now carry the session key and request shape (`rra_s3 albums pop_all` /
+  `rra_s1 albums @1500x500`) alongside the duration, so a slow call reads directly off one
+  log line even when concurrent operations interleave — no more hunting for the matching
+  request line. Investigation context recorded: session-key pooling verified healthy on
+  1674 (bounded key set, 168/168 request/completion match); the multiple keys seen were
+  operations correctly stacking behind slow Core responses, not a leak.
+
 ## [1.6.43] — 2026-07-15
 
 ### Added
