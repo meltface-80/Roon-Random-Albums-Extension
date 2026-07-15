@@ -2,6 +2,28 @@
 
 All notable changes to MusicD Remote (formerly Roon Random Albums) are documented here.
 
+## [1.6.47] — 2026-07-15
+
+### Changed
+
+- **Simpler, snapshot-based library model + robust playback** (user request, replacing the
+  v1.6.46 sync-deferral). The album index is now a stable snapshot: Roon owns the library;
+  the extension scans it once on first pair, then re-checks only **every 12 hours** or on a
+  **manual Rescan** — and **never rebuilds while Roon is importing**. Gone are the 5-minute
+  probe, the play-triggered rechecks, and every user-action rebuild, so the extension stays
+  off a busy Core entirely.
+  - **The "close and reopen it" playback error is fixed.** Playback previously resolved an
+    album by its stored list position, which a Roon import reshuffles — so tapping an album
+    whose position had moved failed. Now, when a stored position is stale, the album is
+    resolved **live by name** via Roon's own search (offset-free, always current, a single
+    lookup — not a scan), so a snapshot that's hours out of date never blocks a play. Only a
+    genuinely-removed album still reports the error.
+  - **Manual "Rescan library"** added to the side menu. It rebuilds the snapshot, but refuses
+    with "Roon is still adding albums — try again shortly" while an import is in progress, so
+    a deliberate press never fights the Core. The 12h auto-check applies the same rule.
+  - Import detection needs no Roon API support: a manual Rescan / 12h check reads the album
+    count, waits a few seconds, reads again — a still-moving count means Roon is importing.
+
 ## [1.6.46] — 2026-07-15
 
 ### Added
